@@ -1,5 +1,6 @@
 # app/services/email_service.py
 
+from enum import StrEnum
 from fastapi_mail import FastMail, MessageSchema, MessageType
 from jinja2 import Template
 from app.core.logging import logger
@@ -9,6 +10,17 @@ from app.core.config import TEMPLATES_DIR, get_mail_config
 
 mail_config = get_mail_config()
 fm = FastMail(mail_config)
+
+
+class EmailType(StrEnum):
+    """Enum for valid email types"""
+    VERIFICATION = "verification"
+    WELCOME = "welcome"
+    PASSWORD_RESET = "password_reset"
+    PASSWORD_RESET_NOTIFICATION = "password_reset_notification"
+    ACCOUNT_DELETION = "account_deletion"
+    ACCOUNT_DELETION_SCHEDULED = "account_deletion_scheduled"
+    ACCOUNT_LOCKED = "account_locked"
 
 
 class EmailService:
@@ -46,29 +58,27 @@ class EmailService:
             )
 
     @staticmethod
-    async def send_templated_email(email_to: list[str], email_type: str, code: str = None, reset_token: str = None, reset_time: str = None, verification_code: str = None):
+    async def send_templated_email(email_to: list[str], email_type: EmailType, code: str = None, reset_token: str = None, reset_time: str = None, verification_code: str = None):
 
-        VALID_EMAIL_TYPES = ["verification", "welcome", "password_reset", "password_reset_notification", "account_deletion", "account_deletion_scheduled", "account_locked"]
-
-        if email_type not in VALID_EMAIL_TYPES:
+        if email_type not in EmailType:
             logger.exception(
                 msg=f"Invalid email type '{email_type}'."
             )
         
-        if email_type == "verification" and code:
+        if email_type == EmailType.VERIFICATION and code:
             await EmailService._send_email(
                 email_to=email_to,
                 subject_template="{{ code }} is your verification code",
                 template_rel_path="auth/email-verification.html",
                 context={"code": code},
             )
-        elif email_type == "welcome":
+        elif email_type == EmailType.WELCOME:
             await EmailService._send_email(
                 email_to=email_to,
                 subject_template="Welcome to SmartSave",
                 template_rel_path="account/user-registration.html",
             )
-        elif email_type == "password_reset" and reset_token:
+        elif email_type == EmailType.PASSWORD_RESET and reset_token:
             frontend_url = "---"
             reset_link = f"{frontend_url}/u/reset-password?token={reset_token}"
             await EmailService._send_email(
@@ -77,27 +87,27 @@ class EmailService:
                 template_rel_path="auth/password-reset.html",
                 context={"reset_link": reset_link},
             )
-        elif email_type == "password_reset_notification" and reset_time:
+        elif email_type == EmailType.PASSWORD_RESET_NOTIFICATION and reset_time:
             await EmailService._send_email(
                 email_to=email_to,
                 subject_template="You changed your Password",
                 template_rel_path="auth/notify-password-reset.html",
                 context={"reset_time": reset_time},
             )
-        elif email_type == "account_deletion" and verification_code:
+        elif email_type == EmailType.ACCOUNT_DELETION and verification_code:
             await EmailService._send_email(
                 email_to=email_to,
                 subject_template="Account Deletion Confirmation",
                 template_rel_path="account/account-deletion.html",
                 context={"verification_code": verification_code},
             )
-        elif email_type == "account_deletion_scheduled":
+        elif email_type == EmailType.ACCOUNT_DELETION_SCHEDULED:
             await EmailService._send_email(
                 email_to=email_to,
                 subject_template="Account Scheduled for Deletion",
                 template_rel_path="account/scheduled-account-deletion.html",
             )
-        elif email_type == "account_locked":
+        elif email_type == EmailType.ACCOUNT_LOCKED:
             await EmailService._send_email(
                 email_to=email_to,
                 subject_template="Your account has been locked",
