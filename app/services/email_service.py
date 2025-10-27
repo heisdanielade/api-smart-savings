@@ -13,7 +13,7 @@ fm = FastMail(mail_config)
 
 class EmailService:
     @staticmethod
-    async def _send_email(email_to: str, subject_template: str, template_rel_path: str, context: dict = None):
+    async def _send_email(email_to: list[str], subject_template: str, template_rel_path: str, context: dict = None):
         """
         Internal helper to render and send HTML emails with templated subjects.
         :param email_to: Recipient email
@@ -33,7 +33,7 @@ class EmailService:
 
             message = MessageSchema(
                 subject=subject,
-                recipients=[email_to],
+                recipients=email_to,
                 body=body,
                 subtype=MessageType.html,
             )
@@ -46,63 +46,60 @@ class EmailService:
             )
 
     @staticmethod
-    async def send_verification_email(email_to: str, code: str):
-        await EmailService._send_email(
-            email_to=email_to,
-            subject_template="{{ code }} is your verification code",
-            template_rel_path="auth/email-verification.html",
-            context={"code": code},
-        )
+    async def send_templated_email(email_to: list[str], email_type: str, code: str = None, reset_token: str = None, reset_time: str = None, verification_code: str = None):
 
-    @staticmethod
-    async def send_welcome_email(email_to: str):
-        await EmailService._send_email(
-            email_to=email_to,
-            subject_template="Welcome to PamietamPsa",
-            template_rel_path="account/user-registration.html",
-        )
+        VALID_EMAIL_TYPES = ["verification", "welcome", "password_reset", "password_reset_notification", "account_deletion", "account_deletion_scheduled", "account_locked"]
 
-    @staticmethod
-    async def send_password_reset_email(email_to: str, reset_token: str):
-        frontend_url = "---"
-        reset_link = f"{frontend_url}/u/reset-password?token={reset_token}"
-        await EmailService._send_email(
-            email_to=email_to,
-            subject_template="You requested a Password Reset",
-            template_rel_path="auth/password-reset.html",
-            context={"reset_link": reset_link},
-        )
-
-    @staticmethod
-    async def send_password_reset_notification_email(email_to: str, reset_time: str):
-        await EmailService._send_email(
-            email_to=email_to,
-            subject_template="You changed your Password",
-            template_rel_path="auth/notify-password-reset.html",
-            context={"reset_time": reset_time},
-        )
-
-    @staticmethod
-    async def send_account_deletion_email(email_to: str, verification_code: str):
-        await EmailService._send_email(
-            email_to=email_to,
-            subject_template="Account Deletion Confirmation",
-            template_rel_path="account/account-deletion.html",
-            context={"verification_code": verification_code},
-        )
-
-    @staticmethod
-    async def send_account_deletion_scheduled_email(email_to: str):
-        await EmailService._send_email(
-            email_to=email_to,
-            subject_template="Account Scheduled for Deletion",
-            template_rel_path="account/scheduled-account-deletion.html",
-        )
-
-    @staticmethod
-    async def send_account_locked_email(email_to: str):
-        await EmailService._send_email(
-            email_to=email_to,
-            subject_template="Your account has been locked",
-            template_rel_path="account/account-locked.html",
-        )
+        if email_type not in VALID_EMAIL_TYPES:
+            logger.exception(
+                msg=f"Invalid email type '{email_type}'."
+            )
+        
+        if email_type == "verification" and code:
+            await EmailService._send_email(
+                email_to=email_to,
+                subject_template="{{ code }} is your verification code",
+                template_rel_path="auth/email-verification.html",
+                context={"code": code},
+            )
+        elif email_type == "welcome":
+            await EmailService._send_email(
+                email_to=email_to,
+                subject_template="Welcome to SmartSave",
+                template_rel_path="account/user-registration.html",
+            )
+        elif email_type == "password_reset" and reset_token:
+            frontend_url = "---"
+            reset_link = f"{frontend_url}/u/reset-password?token={reset_token}"
+            await EmailService._send_email(
+                email_to=email_to,
+                subject_template="You requested a Password Reset",
+                template_rel_path="auth/password-reset.html",
+                context={"reset_link": reset_link},
+            )
+        elif email_type == "password_reset_notification" and reset_time:
+            await EmailService._send_email(
+                email_to=email_to,
+                subject_template="You changed your Password",
+                template_rel_path="auth/notify-password-reset.html",
+                context={"reset_time": reset_time},
+            )
+        elif email_type == "account_deletion" and verification_code:
+            await EmailService._send_email(
+                email_to=email_to,
+                subject_template="Account Deletion Confirmation",
+                template_rel_path="account/account-deletion.html",
+                context={"verification_code": verification_code},
+            )
+        elif email_type == "account_deletion_scheduled":
+            await EmailService._send_email(
+                email_to=email_to,
+                subject_template="Account Scheduled for Deletion",
+                template_rel_path="account/scheduled-account-deletion.html",
+            )
+        elif email_type == "account_locked":
+            await EmailService._send_email(
+                email_to=email_to,
+                subject_template="Your account has been locked",
+                template_rel_path="account/account-locked.html",
+            )
