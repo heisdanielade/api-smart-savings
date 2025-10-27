@@ -1,5 +1,4 @@
 # app/services/email_service.py
-
 from enum import StrEnum
 from fastapi_mail import FastMail, MessageSchema, MessageType
 from jinja2 import Template
