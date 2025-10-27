@@ -15,8 +15,8 @@
 1. **Clone the repository**
 
 ```bash
-git clone https://github.com/heisdanielade/api-savings-app.git
-cd api-savings-app
+git clone https://github.com/heisdanielade/api-smart-savings.git
+cd api-smart-savings
 
 ```
 
