@@ -4,13 +4,27 @@ from fastapi.exceptions import RequestValidationError
 from slowapi.errors import RateLimitExceeded
 from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
 from fastapi.openapi.utils import get_openapi
+from contextlib import asynccontextmanager
 
 from .utils.response import standard_response
-from .core.logging import log_requests
+from .core.logging import log_requests, cleanup_old_logs
 from .api.dependencies import authenticate
 from app.core.rate_limiter import limiter
 from app.utils import handlers
 
+
+
+# =======================================
+# LIFESPAN EVENTS
+# =======================================
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup Events
+    cleanup_old_logs()
+
+    yield # App Runs 
+
+    # Shutdown Events
 
 app = FastAPI(
     title="SmartSave API",
@@ -18,6 +32,7 @@ app = FastAPI(
     docs_url=None,
     redoc_url=None,
     openapi_url=None,
+    lifespan=lifespan,
 )
 app.state.limiter = limiter
 
