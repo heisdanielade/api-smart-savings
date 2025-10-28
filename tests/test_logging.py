@@ -4,15 +4,12 @@ import logging
 import datetime
 import asyncio
 from unittest.mock import Mock, patch, MagicMock
-from fastapi import Request, Response
+from fastapi import Request, Response, status
+from slowapi.errors import RateLimitExceeded
 
-from app.core.logging import (
-    JsonFormatter,
-    CleanupJsonFormatter,
-    log_requests,
-    log_rate_limit_exceeded,
-    cleanup_old_logs,
-)
+from app.core.logging import JsonFormatter, CleanupJsonFormatter, log_requests, log_rate_limit_exceeded, cleanup_old_logs
+from app.utils.handlers import rate_limit_handler
+
 
 
 class TestJsonFormatter:
@@ -91,7 +88,6 @@ class TestCleanupJsonFormatter:
         assert "datetime" in log_entry
 
 
-@pytest.mark.asyncio
 class TestLogRequests:
     async def test_log_requests_success(self):
         """Test log_requests middleware logs successful requests."""
@@ -221,3 +217,49 @@ class TestCleanupOldLogs:
             # Should not raise exception
             cleanup_old_logs()
             mock_log_dir.glob.assert_not_called()
+
+
+class TestRateLimitHandler:
+    def test_rate_limit_handler_logs_and_returns_429(self):
+        """Test rate_limit_handler logs the event and returns proper response."""
+        mock_request = Mock(spec=Request)
+        mock_request.url.path = "/api/savings"
+        mock_request.method = "POST"
+        
+        mock_exc = Mock(spec=RateLimitExceeded)
+        
+        with patch("app.utils.handlers.get_remote_address", return_value="192.168.1.100"), \
+             patch("app.utils.handlers.log_rate_limit_exceeded") as mock_log_rate_limit:
+            
+            # Call the async function synchronously in test
+            import asyncio
+            response = asyncio.run(rate_limit_handler(mock_request, mock_exc))
+            
+            # Verify logging was called with correct parameters
+            mock_log_rate_limit.assert_called_once_with(mock_request, ip="192.168.1.100")
+            
+            # Verify response
+            assert response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+            response_body = response.body.decode()
+            assert "Rate limit exceeded" in response_body
+            assert "error" in response_body
+
+    def test_rate_limit_handler_with_different_ips(self):
+        """Test rate_limit_handler handles different IP addresses."""
+        mock_request = Mock(spec=Request)
+        mock_request.url.path = "/api/users"
+        mock_request.method = "GET"
+        
+        mock_exc = Mock(spec=RateLimitExceeded)
+        
+        test_ips = ["10.0.0.1", "203.0.113.1", "2001:db8::1"]
+        
+        import asyncio
+        for test_ip in test_ips:
+            with patch("app.utils.handlers.get_remote_address", return_value=test_ip), \
+                 patch("app.utils.handlers.log_rate_limit_exceeded") as mock_log_rate_limit:
+                
+                response = asyncio.run(rate_limit_handler(mock_request, mock_exc))
+                
+                mock_log_rate_limit.assert_called_once_with(mock_request, ip=test_ip)
+                assert response.status_code == status.HTTP_429_TOO_MANY_REQUESTS
