@@ -2,25 +2,17 @@
 
 import secrets
 import string
+import hashlib
+import os
+
+SALT = os.getenv("IP_HASH_SALT", "change_this_salt")
 
 def generate_secure_code(length=6):
     return ''.join(secrets.choice(string.digits) for _ in range(length))
 
 
 def mask_ip(ip: str) -> str:
-    """
-    Mask IP address for logging.
-    
-    Examples:
-        "192.168.1.100" -> "192.168.xxx"
-        "2001:0db8:85a3:0000:0000:8a2e:0370:7334" -> "2001:0db8:85a3:0000:xxxx:xxxx"
-    """
-    if ":" in ip:  # IPv6
-        parts = ip.split(":")
-        return ":".join(parts[:4]) + ":xxxx:xxxx"
-    else:  # IPv4
-        parts = ip.split(".")
-        return ".".join(parts[:2] + ["xxx"])
+    return hashlib.sha256((ip + SALT).encode()).hexdigest()
 
 
 def mask_email(email: str) -> str:
