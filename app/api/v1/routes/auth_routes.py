@@ -9,7 +9,7 @@ from app.db.session import get_session
 from app.core.rate_limiter import limiter
 from app.utils.response import standard_response
 from app.services.auth_service import AuthService
-from app.schemas.auth_schemas import RegisterRequest, VerifyEmailRequest, LoginRequest, EmailOnlyRequest
+from app.schemas.auth_schemas import RegisterRequest, VerifyEmailRequest, LoginRequest, EmailOnlyRequest, ResetPasswordRequest
 
 
 router = APIRouter()
@@ -115,6 +115,45 @@ async def resend_verification(
     return standard_response(
         status="success",
         message="A new verification code has been sent to your email.",
+    )
+
+
+@router.post("/reset-password", status_code=status.HTTP_200_OK)
+@limiter.limit("3/minute")
+async def reset_password(
+    request: Request,
+    reset_request: ResetPasswordRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_session),
+) -> dict[str, Any]:
+    """
+    Reset user's password using a valid reset token.
+    
+    Takes a reset token (from the reset email) and a new password.
+    Validates the token, updates the password, and sends a confirmation email.
+    
+    Args:
+        reset_request (ResetPasswordRequest): Reset token and new password
+        background_tasks (BackgroundTasks): FastAPI background tasks handler
+        db (Session): Database session
+    
+    Returns:
+        dict[str, Any]: Success message confirming the password was reset
+    
+    Raises:
+        HTTPException: 400 Bad Request if token is invalid or expired
+        HTTPException: 404 Not Found if user does not exist
+        HTTPException: 429 Too Many Requests if rate limit is exceeded
+    """
+    await AuthService.reset_password(
+        reset_request=reset_request,
+        db=db,
+        background_tasks=background_tasks,
+    )
+    
+    return standard_response(
+        status="success",
+        message="Password has been reset successfully. You can now log in with your new password."
     )
 
 
