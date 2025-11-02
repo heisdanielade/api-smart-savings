@@ -10,7 +10,7 @@ from app.core.logging import logger
 from app.models.user_model import User
 from app.core.security import hash_password, verify_password
 from app.core.config import settings
-from app.schemas.auth_schemas import RegisterRequest, LoginRequest, VerifyEmailRequest, EmailOnlyRequest
+from app.schemas.auth_schemas import RegisterRequest, LoginRequest, VerifyEmailRequest, EmailOnlyRequest, ResetPasswordRequest
 from app.core.jwt import create_access_token, decode_token, create_password_reset_token
 from app.core.security import generate_secure_code
 from app.services.email_service import EmailType, EmailService
@@ -186,6 +186,79 @@ class AuthService:
                 email_type=EmailType.VERIFICATION,
                 email_to=[email],
                 code=verification_code
+            )
+
+    @staticmethod
+    async def reset_password(
+        reset_request: ResetPasswordRequest,
+        db: Session,
+        background_tasks=None,
+    ) -> None:
+        """
+        Reset user's password using a valid reset token.
+
+        Args:
+            reset_request (ResetPasswordRequest): Schema containing reset token and new password
+            db (Session): Database session
+            background_tasks: Optional background tasks runner for async email sending
+
+        Raises:
+            HTTPException: 400 Bad Request if token is invalid or expired
+            HTTPException: 404 Not Found if user does not exist
+        """
+        try:
+            token_data = decode_token(reset_request.reset_token)
+            if token_data.get("type") != "password_reset":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid reset token"
+                )
+            
+            stmt = select(User).where(User.email == token_data["sub"])
+            user = db.exec(stmt).first()
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="User not found"
+                )
+            
+            user.password_hash = hash_password(reset_request.new_password)
+            user.failed_login_attempts = 0
+            user.is_enabled = True
+            user.updated_at = datetime.now(timezone.utc)
+            
+            db.add(user)
+            db.commit()
+            
+            reset_time = user.updated_at.strftime("%Y-%m-%d %H:%M:%S UTC")
+            if background_tasks:
+                background_tasks.add_task(
+                    EmailService.send_templated_email,
+                    email_type=EmailType.PASSWORD_RESET_NOTIFICATION,
+                    email_to=[user.email],
+                    reset_time=reset_time
+                )
+            else:
+                await EmailService.send_templated_email(
+                    email_type=EmailType.PASSWORD_RESET_NOTIFICATION,
+                    email_to=[user.email],
+                    reset_time=reset_time
+                )
+                
+            logger.info(
+                "Password reset successful",
+                extra={
+                    "email": mask_email(user.email)
+                }
+            )
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Password reset failed: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired reset token"
             )
 
     @staticmethod
