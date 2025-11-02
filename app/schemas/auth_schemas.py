@@ -35,3 +35,9 @@ class VerifyEmailRequest(BaseModel):
 
     email: EmailStr
     verification_code: str
+
+
+class EmailOnlyRequest(BaseModel):
+    """Schema for email-only requests like resending verification codes."""
+
+    email: EmailStr

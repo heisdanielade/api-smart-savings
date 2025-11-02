@@ -10,7 +10,7 @@ from app.core.logging import logger
 from app.models.user_model import User
 from app.core.security import hash_password, verify_password
 from app.core.config import settings
-from app.schemas.auth_schemas import RegisterRequest, LoginRequest, VerifyEmailRequest
+from app.schemas.auth_schemas import RegisterRequest, LoginRequest, VerifyEmailRequest, EmailOnlyRequest
 from app.core.jwt import create_access_token, decode_token
 from app.core.security import generate_secure_code
 from app.services.email_service import EmailType, EmailService
@@ -128,6 +128,65 @@ class AuthService:
             )
         else:
             await EmailService.send_templated_email(email_type=EmailType.WELCOME, email_to=[existing_user.email])
+
+    @staticmethod
+    async def resend_verification_code(
+        email: EmailOnlyRequest,
+        db: Session,
+        background_tasks=None,
+    ) -> None:
+        """
+        Resend verification code to a user's email address.
+
+        Checks if the user exists and is not already verified. Generates a new
+        verification code and sends it to the user's email address. Updates the
+        user's verification code and expiry time in the database.
+
+        Args:
+            email (str): Email address of the user requesting code resend.
+            db (Session): SQLModel session for database operations.
+            background_tasks: Optional background tasks runner for async email sending.
+
+        Raises:
+            HTTPException: 404 Not Found if the user account does not exist.
+            HTTPException: 409 Conflict if the account is already verified.
+        """
+        stmt = select(User).where(User.email == email)
+        existing_user = db.exec(stmt).one_or_none()
+
+        if not existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Account does not exist",
+            )
+
+        if existing_user.is_verified:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Account is already verified",
+            )
+
+        verification_code = generate_secure_code()
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+
+        existing_user.verification_code = verification_code
+        existing_user.verification_code_expires_at = expires_at
+        db.add(existing_user)
+        db.commit()
+
+        if background_tasks:
+            background_tasks.add_task(
+                EmailService.send_templated_email,
+                email_type=EmailType.VERIFICATION,
+                email_to=[email],
+                code=verification_code
+            )
+        else:
+            await EmailService.send_templated_email(
+                email_type=EmailType.VERIFICATION,
+                email_to=[email],
+                code=verification_code
+            )
 
     @staticmethod
     async def login_existing_user(
