@@ -118,6 +118,42 @@ async def resend_verification(
     )
 
 
+@router.post("/request-password-reset", status_code=status.HTTP_200_OK)
+@limiter.limit("2/minute")
+async def request_password_reset(
+    request: Request,
+    email_request: EmailOnlyRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_session),
+) -> dict[str, Any]:
+    """
+    Request a password reset email.
+
+    Accepts user's email, generates a password reset token, and sends
+    a reset link via email. The reset link will be valid for a limited time.
+
+    Args:
+        email_request (EmailOnlyRequest): User's email address.
+
+    Returns:
+        dict(str, Any): Success message confirming the reset email was sent.
+
+    Raises:
+        HTTPException: 404 Not Found if the user account does not exist.
+        HTTPException: 429 Too Many Requests if the rate limit is exceeded.
+    """
+    await AuthService.request_password_reset(
+        email=email_request.email,
+        db=db,
+        background_tasks=background_tasks,
+    )
+
+    return standard_response(
+        status="success",
+        message="If an account exists with this email, you will receive password reset instructions.",
+    )
+
+
 @router.post("/login", status_code=status.HTTP_200_OK)
 @limiter.limit("4/minute")
 async def login(

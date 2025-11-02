@@ -199,7 +199,7 @@ class AuthService:
 
         Verifies the user exists and generates a password reset token.
         Sends a password reset email with the token embedded in a reset link.
-        The reset link will be valid for 1 hour.
+        The reset link will be valid for 15 minutes.
 
         Args:
             email (str): Email address of the user requesting password reset.
