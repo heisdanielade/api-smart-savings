@@ -29,6 +29,14 @@ def decode_token(token: str) -> dict[str, Any]:
         ) from e
         
 
+def create_password_reset_token(email: str) -> str:
+    """Create password reset token valid for 1 hour."""
+    to_encode = {"sub": email, "type": "password_reset"}
+    expire = datetime.now(timezone.utc) + timedelta(hours=1)
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, KEY, algorithm=ALGORITHM)
+
+
 def create_access_token(data: dict[str, Union[str, int]]):
     """Create login access token"""
     to_encode = data.copy()
