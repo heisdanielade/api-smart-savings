@@ -32,7 +32,7 @@ def decode_token(token: str) -> dict[str, Any]:
 def create_password_reset_token(email: str) -> str:
     """Create password reset token valid for 1 hour."""
     to_encode = {"sub": email, "type": "password_reset"}
-    expire = datetime.now(timezone.utc) + timedelta(minute=15)
+    expire = datetime.now(timezone.utc) + timedelta(seconds=900)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, KEY, algorithm=ALGORITHM)
 
