@@ -11,7 +11,7 @@ from app.models.user_model import User
 from app.core.security import hash_password, verify_password
 from app.core.config import settings
 from app.schemas.auth_schemas import RegisterRequest, LoginRequest, VerifyEmailRequest, EmailOnlyRequest
-from app.core.jwt import create_access_token, decode_token
+from app.core.jwt import create_access_token, decode_token, create_password_reset_token
 from app.core.security import generate_secure_code
 from app.services.email_service import EmailType, EmailService
 from app.utils.helpers import hash_ip, mask_email
@@ -186,6 +186,57 @@ class AuthService:
                 email_type=EmailType.VERIFICATION,
                 email_to=[email],
                 code=verification_code
+            )
+
+    @staticmethod
+    async def request_password_reset(
+        email: EmailOnlyRequest,
+        db: Session,
+        background_tasks=None,
+    ) -> None:
+        """
+        Process a password reset request.
+
+        Verifies the user exists and generates a password reset token.
+        Sends a password reset email with the token embedded in a reset link.
+        The reset link will be valid for 1 hour.
+
+        Args:
+            email (str): Email address of the user requesting password reset.
+            db (Session): SQLModel session for database operations.
+            background_tasks: Optional background tasks runner for async email sending.
+
+        Raises:
+            HTTPException: 404 Not Found if the user account does not exist.
+        """
+        stmt = select(User).where(User.email == email)
+        existing_user = db.exec(stmt).one_or_none()
+
+        if not existing_user:
+            # We return success to avoid email enumeration
+            # but log the attempt for security monitoring
+            logger.warning(
+                "Password reset requested for non-existent email",
+                extra={
+                    "email": mask_email(email)
+                }
+            )
+            return
+
+        reset_token = create_password_reset_token(email)
+
+        if background_tasks:
+            background_tasks.add_task(
+                EmailService.send_templated_email,
+                email_type=EmailType.PASSWORD_RESET,
+                email_to=[email],
+                reset_token=reset_token,
+            )
+        else:
+            await EmailService.send_templated_email(
+                email_type=EmailType.PASSWORD_RESET,
+                email_to=[email],
+                reset_token=reset_token,
             )
 
     @staticmethod
