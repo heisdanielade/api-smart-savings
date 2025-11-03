@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from fastapi import Request, APIRouter, Depends, HTTPException, status
+from fastapi import Request, APIRouter, Depends, status, BackgroundTasks
 from sqlmodel import Session
 
 from app.db.session import get_session
@@ -11,7 +11,7 @@ from app.core.rate_limiter import limiter
 from app.utils.response import standard_response
 from app.api.dependencies import get_current_user
 from app.services.user_service import UserService
-from app.schemas.user_schemas import UserUpdate
+from app.schemas.user_schemas import UserUpdate, ChangePasswordRequest
 
 router = APIRouter()
 
@@ -68,4 +68,29 @@ async def update_user_info(
     return standard_response(
         status="success",
         message=msg,
+    )
+
+
+@router.post("/change-password", status_code=status.HTTP_200_OK)
+@limiter.limit("3/minute")
+async def change_user_password(request: Request, change_password_request: ChangePasswordRequest, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)) -> dict[str, Any]:
+    """
+    Update currently authenticated user password, requires current password for verification.
+
+    Args:
+        change_password_request (ChangePasswordRequest): Schema for password change (current_password, new_password).
+        current_user (User): User model instance representing the authenticated user.
+        
+    Returns:
+        dict(str, Any): Success message indicating password change.
+
+    Raises:
+        HTTPException: 403 Forbidden if the provided 'current_password' is invalid.
+        HTTPException: 429 Too Many Requests if the rate limit is exceeded.
+    """
+    await UserService.update_user_password(change_password_request=change_password_request, current_user=current_user, db=db)
+    
+    return standard_response(
+        status="success",
+        message="You have successfully changed your password."
     )

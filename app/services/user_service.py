@@ -7,9 +7,9 @@ from fastapi import HTTPException, status
 from sqlmodel import Session, select
 
 from app.models.user_model import User
-from app.schemas.user_schemas import UserUpdate
-from app.services.email_service import EmailService
-from app.core.security import generate_secure_code
+from app.schemas.user_schemas import UserUpdate, ChangePasswordRequest
+from app.services.email_service import EmailService, EmailType
+from app.core.security import hash_password, verify_password
 
 
 class UserService:
@@ -45,7 +45,7 @@ class UserService:
         Partially update currently authenticated user if any changes are provided.
 
         Args:
-            update_request (UserUpdate): UserUpdate schema for partial updates to currently authenticated user.
+            update_request (UserUpdate): Schema for partial updates to currently authenticated user.
             current_user (User): User model instance representing the authenticated user.
 
         Returns:
@@ -63,7 +63,7 @@ class UserService:
         # Update only fields that were provided
         for field, value in update_data.items():
             setattr(existing_user, field, value)
-        
+
         db.add(existing_user)
         db.commit()
         db.refresh(existing_user)
@@ -72,3 +72,46 @@ class UserService:
             "message": "User details updated successfully."
         }
         
+
+    @staticmethod
+    async def update_user_password(change_password_request: ChangePasswordRequest, current_user: User, db: Session, background_tasks=None) -> None:
+        """
+        Update currently authenticated user password, requires current password for verification.
+
+        Args:
+            change_password_request (ChangePasswordRequest): Schema for password change (current_password, new_password).
+            current_user (User): User model instance representing the authenticated user.
+        
+        Raises:
+            HTTPException: 403 Forbidden if the provided current_password is invalid.
+        """
+        # Fetch the user
+        stmt = select(User).where(User.email == current_user.email)
+        existing_user = db.exec(stmt).one()
+        user_email = existing_user.email
+
+        current_pass = change_password_request.current_password
+        new_pass = hash_password(change_password_request.new_password)
+        
+        if not verify_password(plain_password=current_pass, hashed_password=existing_user.password_hash):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Invalid current password."
+            )
+        
+        existing_user.password_hash = new_pass
+        
+        db.add(existing_user)
+        db.commit()
+        
+        if background_tasks:
+            background_tasks.add_task(
+                EmailService.send_templated_email,
+                email_type=EmailType.PASSWORD_CHANGE_NOTIFICATION,
+                email_to=[user_email]
+            )
+        else:
+            await EmailService.send_templated_email(
+                email_type=EmailType.PASSWORD_CHANGE_NOTIFICATION,
+                email_to=[user_email]
+            )
