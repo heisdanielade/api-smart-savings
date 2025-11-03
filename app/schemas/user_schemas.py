@@ -9,6 +9,7 @@ class UserUpdate(BaseModel):
     """Schema for partial update of user data."""
 
     full_name: Optional[str] = None
+<<<<<<< HEAD
     language_preference: Optional[str] = None
     
 class ChangePasswordRequest(BaseModel):
@@ -28,3 +29,6 @@ class ChangePasswordRequest(BaseModel):
         if not any(c.isdigit() for c in v):
             raise ValueError("Password must contain at least one digit")
         return v
+=======
+    language_preference: Optional[str] = None
+>>>>>>> 6ede2610373403b5736fdd43faada6bd0f6b48d8

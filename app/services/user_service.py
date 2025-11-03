@@ -7,9 +7,15 @@ from fastapi import HTTPException, status
 from sqlmodel import Session, select
 
 from app.models.user_model import User
+<<<<<<< HEAD
 from app.schemas.user_schemas import UserUpdate, ChangePasswordRequest
 from app.services.email_service import EmailService, EmailType
 from app.core.security import hash_password, verify_password
+=======
+from app.schemas.user_schemas import UserUpdate
+from app.services.email_service import EmailService
+from app.core.security import generate_secure_code
+>>>>>>> 6ede2610373403b5736fdd43faada6bd0f6b48d8
 
 
 class UserService:
@@ -45,7 +51,11 @@ class UserService:
         Partially update currently authenticated user if any changes are provided.
 
         Args:
+<<<<<<< HEAD
             update_request (UserUpdate): Schema for partial updates to currently authenticated user.
+=======
+            update_request (UserUpdate): UserUpdate schema for partial updates to currently authenticated user.
+>>>>>>> 6ede2610373403b5736fdd43faada6bd0f6b48d8
             current_user (User): User model instance representing the authenticated user.
 
         Returns:
@@ -63,7 +73,11 @@ class UserService:
         # Update only fields that were provided
         for field, value in update_data.items():
             setattr(existing_user, field, value)
+<<<<<<< HEAD
 
+=======
+        
+>>>>>>> 6ede2610373403b5736fdd43faada6bd0f6b48d8
         db.add(existing_user)
         db.commit()
         db.refresh(existing_user)
@@ -71,6 +85,7 @@ class UserService:
         return {
             "message": "User details updated successfully."
         }
+<<<<<<< HEAD
         
 
     @staticmethod
@@ -115,3 +130,6 @@ class UserService:
                 email_type=EmailType.PASSWORD_CHANGE_NOTIFICATION,
                 email_to=[user_email]
             )
+=======
+        
+>>>>>>> 6ede2610373403b5736fdd43faada6bd0f6b48d8
