@@ -7,6 +7,7 @@ from fastapi import HTTPException, status
 from sqlmodel import Session, select
 
 from app.models.user_model import User
+from app.schemas.user_schemas import UserUpdate
 from app.services.email_service import EmailService
 from app.core.security import generate_secure_code
 
@@ -37,3 +38,37 @@ class UserService:
         }
 
         return data
+    
+    @staticmethod
+    async def update_user_details(update_request: UserUpdate, current_user: User, db: Session) -> dict[str, str]:
+        """
+        Partially update currently authenticated user if any changes are provided.
+
+        Args:
+            update_request (UserUpdate): UserUpdate schema for partial updates to currently authenticated user.
+            current_user (User): User model instance representing the authenticated user.
+
+        Returns:
+            dict(str, str): Dictionary containing response message.
+        """
+        update_data = update_request.model_dump(exclude_unset=True)
+        # Early return if nothing to update
+        if not update_data:
+            return {"message": "No changes provided."}
+        
+        # Fetch the user (exists by JWT, so no need to validate existence)
+        stmt = select(User).where(User.email == current_user.email)
+        existing_user = db.exec(stmt).one()
+        
+        # Update only fields that were provided
+        for field, value in update_data.items():
+            setattr(existing_user, field, value)
+        
+        db.add(existing_user)
+        db.commit()
+        db.refresh(existing_user)
+        
+        return {
+            "message": "User details updated successfully."
+        }
+        
