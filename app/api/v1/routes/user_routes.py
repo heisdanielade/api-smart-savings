@@ -94,3 +94,15 @@ async def change_user_password(request: Request, change_password_request: Change
         status="success",
         message="You have successfully changed your password."
     )
+
+
+@router.post("/gdpr-request", status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("2/hour")
+async def request_user_data_gdpr(request: Request, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)) -> dict[str, Any]:
+
+    await UserService.request_data_gdpr(request=request, current_user=current_user, db=db)
+    
+    return standard_response(
+        status="success",
+        message="Your GDPR data request has been received and is now being processed. You’ll receive your data within 24 hours."
+    )

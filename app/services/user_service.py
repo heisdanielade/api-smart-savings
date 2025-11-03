@@ -3,13 +3,16 @@
 from typing import Any
 from datetime import datetime, timezone, timedelta
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, Request
 from sqlmodel import Session, select
 
+
+from app.core.logging import logger
 from app.models.user_model import User
 from app.schemas.user_schemas import UserUpdate, ChangePasswordRequest
 from app.services.email_service import EmailService, EmailType
 from app.core.security import hash_password, verify_password
+from app.utils.helpers import hash_ip, mask_email
 
 
 class UserService:
@@ -113,4 +116,23 @@ class UserService:
             await EmailService.send_templated_email(
                 email_type=EmailType.PASSWORD_CHANGE_NOTIFICATION,
                 email_to=[user_email]
+            )
+
+
+# =========== TODO ===========
+    @staticmethod
+    async def request_data_gdpr(request: Request, current_user: User, db: Session, background_tasks=None) -> None:
+        ip = hash_ip(request.client.host)  # type: ignore
+
+        stmt = select(User).where(User.email == current_user.email)
+        existing_user = db.exec(stmt).one_or_none()
+        
+        logger.info(
+            msg="GDPR Data Request",
+            extra={
+                "method": "POST",
+                "path": "/v1/user/gdpr-request",
+                "status_code": 202,
+                "ip_anonymized": ip,
+                },
             )
