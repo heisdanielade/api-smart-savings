@@ -39,8 +39,9 @@ async def lifespan(app: FastAPI):
 # =======================================
 # APP INSTANCE
 # =======================================
+app_name = settings.APP_NAME
 app = FastAPI(
-    title=f"{settings.APP_NAME} API",
+    title=f"{app_name} API",
     version="1.0.0",
     description="Backend service for a smart savings app.",
     docs_url=None,
@@ -106,14 +107,16 @@ def root():
 
 @app.get("/docs", include_in_schema=False)
 async def custom_swagger_ui(authenticated: bool = Depends(authenticate)):
-    return get_swagger_ui_html(openapi_url="/openapi.json", title="API Docs")
+    return get_swagger_ui_html(
+        openapi_url="/openapi.json", title=f"{app_name} API Docs"
+    )
 
 
 @app.get("/redoc", include_in_schema=False)
 async def custom_redoc_ui(authenticated: bool = Depends(authenticate)):
-    return get_redoc_html(openapi_url="/openapi.json", title="API Docs")
+    return get_redoc_html(openapi_url="/openapi.json", title=f"{app_name} API Docs")
 
 
 @app.get("/openapi.json", include_in_schema=False)
 async def openapi_json(authenticated: bool = Depends(authenticate)):
-    return get_openapi(title="API Docs", version="1.0.0", routes=app.routes)
+    return get_openapi(title=f"{app_name} API Docs", version="1.0.0", routes=app.routes)
