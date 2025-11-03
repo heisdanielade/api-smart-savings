@@ -41,7 +41,7 @@ async def test_send_verification_email(email_service_module, monkeypatch):
     monkeypatch.setattr(EmailService, "_send_email", mock_send, raising=True)
 
     await EmailService.send_templated_email(
-        EmailType.VERIFICATION, ["test@example.com"], code="123456"
+        EmailType.VERIFICATION, ["test@example.com"], verification_code="123456"
     )
     assert mock_send.await_count == 1
 
