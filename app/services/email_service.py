@@ -16,13 +16,17 @@ fm = FastMail(mail_config)
 class EmailType(StrEnum):
     """Enum for valid email types"""
 
-    VERIFICATION = "verification"
+    # Auth
     WELCOME = "welcome"
+    VERIFICATION = "verification"
     PASSWORD_RESET = "password_reset"
-    PASSWORD_RESET_NOTIFICATION = "password_reset_notification"
+    # Account
     ACCOUNT_DELETION = "account_deletion"
     ACCOUNT_DELETION_SCHEDULED = "account_deletion_scheduled"
     ACCOUNT_LOCKED = "account_locked"
+    # Notification
+    PASSWORD_RESET_NOTIFICATION = "password_reset_notification"
+    PASSWORD_CHANGE_NOTIFICATION = "password_change_notification"
 
 
 class EmailService:
@@ -61,7 +65,7 @@ class EmailService:
 
         except Exception:
             logger.exception(
-                msg=f"Failed to send email '{subject_template}' to {mask_email(email_to)}"
+                msg=f"Failed to send email '{subject_template}' to {mask_email(email_to[0])}"
             )
 
     @staticmethod
@@ -107,6 +111,12 @@ class EmailService:
                 subject_template="You changed your Password",
                 template_rel_path="auth/notify-password-reset.html",
                 context={"reset_time": reset_time},
+            )
+        elif email_type == EmailType.PASSWORD_CHANGE_NOTIFICATION:
+            await EmailService._send_email(
+                email_to=email_to,
+                subject_template="You changed your Password",
+                template_rel_path="account/notify-password-change.html"
             )
         elif email_type == EmailType.ACCOUNT_DELETION and verification_code:
             await EmailService._send_email(
