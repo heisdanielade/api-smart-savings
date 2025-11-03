@@ -65,7 +65,6 @@ async def verify_email(
 
     Args:
         verify_email_request (VerifyEmailRequest): User's email and verification code.
-        db (Session): SQLModel session injected by dependency.
 
     Returns:
         dict(str, Any): Success message confirming email verification.
@@ -139,8 +138,6 @@ async def reset_password(
 
     Args:
         reset_request (ResetPasswordRequest): Reset token and new password
-        background_tasks (BackgroundTasks): FastAPI background tasks handler
-        db (Session): Database session
 
     Returns:
         dict[str, Any]: Success message confirming the password was reset

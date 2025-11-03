@@ -21,7 +21,7 @@ class EmailType(StrEnum):
     VERIFICATION = "verification"
     PASSWORD_RESET = "password_reset"
     # Account
-    ACCOUNT_DELETION = "account_deletion"
+    ACCOUNT_DELETION_REQUEST = "account_deletion_request"
     ACCOUNT_DELETION_SCHEDULED = "account_deletion_scheduled"
     ACCOUNT_LOCKED = "account_locked"
     # Notification
@@ -72,7 +72,6 @@ class EmailService:
     async def send_templated_email(
         email_type: EmailType,
         email_to: list[str],
-        code: str = None,
         reset_token: str = None,
         reset_time: str = None,
         verification_code: str = None,
@@ -83,12 +82,12 @@ class EmailService:
             logger.exception(f"Invalid email type '{email_type}'")
             return  # or raise an exception
 
-        if email_type == EmailType.VERIFICATION and code:
+        if email_type == EmailType.VERIFICATION and verification_code:
             await EmailService._send_email(
                 email_to=email_to,
-                subject_template=f"{ code } is your verification code",
+                subject_template=f"{ verification_code } is your verification code",
                 template_rel_path="auth/email-verification.html",
-                context={"verification_code": code},
+                context={"verification_code": verification_code},
             )
         elif email_type == EmailType.WELCOME:
             await EmailService._send_email(
@@ -118,7 +117,7 @@ class EmailService:
                 subject_template="You changed your Password",
                 template_rel_path="account/notify-password-change.html"
             )
-        elif email_type == EmailType.ACCOUNT_DELETION and verification_code:
+        elif email_type == EmailType.ACCOUNT_DELETION_REQUEST and verification_code:
             await EmailService._send_email(
                 email_to=email_to,
                 subject_template="Account Deletion Confirmation",

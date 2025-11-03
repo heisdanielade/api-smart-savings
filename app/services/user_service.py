@@ -6,13 +6,13 @@ from datetime import datetime, timezone, timedelta
 from fastapi import HTTPException, status, Request
 from sqlmodel import Session, select
 
-
 from app.core.logging import logger
 from app.models.user_model import User
 from app.schemas.user_schemas import UserUpdate, ChangePasswordRequest
+from app.schemas.auth_schemas import VerificationCodeOnlyRequest
 from app.services.email_service import EmailService, EmailType
-from app.core.security import hash_password, verify_password
-from app.utils.helpers import hash_ip, mask_email
+from app.core.security import hash_password, verify_password, generate_secure_code
+from app.utils.helpers import hash_ip
 
 
 class UserService:
@@ -49,7 +49,6 @@ class UserService:
 
         Args:
             update_request (UserUpdate): Schema for partial updates to currently authenticated user.
-            current_user (User): User model instance representing the authenticated user.
 
         Returns:
             dict(str, str): Dictionary containing response message.
@@ -82,8 +81,7 @@ class UserService:
 
         Args:
             change_password_request (ChangePasswordRequest): Schema for password change (current_password, new_password).
-            current_user (User): User model instance representing the authenticated user.
-        
+      
         Raises:
             HTTPException: 403 Forbidden if the provided current_password is invalid.
         """
@@ -118,6 +116,127 @@ class UserService:
                 email_to=[user_email]
             )
 
+
+    @staticmethod
+    async def request_delete_account(current_user: User, db: Session, background_tasks=None) -> None:        
+        """
+        Generate a verification code and initiate account deletion process for a user.
+
+        Checks if the user has already scheduled account deletion. If not, generates a
+        time-limited verification code and updates the user record in the database.
+        Sends an email containing the verification code to the user's registered email.
+
+        Args:
+            user (User): The user requesting account deletion.
+            db (Session): SQLModel session used to perform database operations.
+        """
+        code = generate_secure_code()
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+        
+        current_user.verification_code = code
+        current_user.verification_code_expires_at = expires_at
+
+        db.add(current_user)
+        db.commit()
+        db.refresh(current_user)
+        
+        if background_tasks:
+            background_tasks.add(
+                EmailService.send_templated_email,
+                email_type=EmailType.ACCOUNT_DELETION_REQUEST,
+                email_to=[current_user.email],
+                verification_code=code
+            )
+        else:
+            await EmailService.send_templated_email(
+                email_type=EmailType.ACCOUNT_DELETION_REQUEST,
+                email_to=[current_user.email],
+                verification_code=code
+            )
+        
+        
+    @staticmethod
+    async def schedule_account_delete(
+        request: Request,
+        current_user: User,
+        deletion_request: VerificationCodeOnlyRequest,
+        db: Session,
+        background_tasks=None
+    ) -> None:
+        """
+        Verify the account deletion code and schedule the user's account for deletion.
+
+        Checks if the account is already scheduled for deletion. Validates the provided
+        verification code against the user's current code and its expiration. If valid,
+        marks the account as deleted, clears the verification code, and commits the changes
+        to the database. Sends a confirmation email notifying the user that the account
+        deletion has been scheduled.
+
+        Args:
+            user (User): The user requesting account deletion.
+            deletion_request (VerificationCodeOnlyRequest): The one-time code sent to the user's email.
+            db (Session): SQLModel session used to perform database operations.
+
+        Raises:
+            HTTPException: 400 Bad Request if the verification code is invalid or expired.
+        """
+        ip = hash_ip(request.client.host)  # type: ignore
+
+        logger.info(
+            msg="Account Deletion Request",
+            extra={
+                "method": "POST",
+                "path": "/v1/user/schedule-delete",
+                "status_code": 202,
+                "ip_anonymized": ip,
+                },
+            )
+
+        if current_user.is_deleted:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Account is already scheduled for deletion."
+            )
+        
+        ver_code = deletion_request.verification_code
+        
+        # Make expires_at timezone-aware
+        expires_at = current_user.verification_code_expires_at
+        if expires_at and expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+        if (
+            current_user.verification_code != ver_code
+            or not current_user.verification_code_expires_at
+            or expires_at < datetime.now(timezone.utc)
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired verification code.",
+            )    
+
+        current_user.is_deleted = True
+        current_user.deleted_at = datetime.now(timezone.utc)
+        current_user.verification_code = None
+        current_user.verification_code_expires_at = None
+        
+        db.add(current_user)
+        db.commit()
+        
+        if background_tasks:
+            background_tasks.add(
+                EmailService.send_templated_email,
+                email_type=EmailType.ACCOUNT_DELETION_SCHEDULED,
+                email_to=[current_user.email]
+            )
+        else:
+            await EmailService.send_templated_email(
+                email_type=EmailType.ACCOUNT_DELETION_SCHEDULED,
+                email_to=[current_user.email]
+            )
+        
+        
+        
 
 # =========== TODO ===========
     @staticmethod

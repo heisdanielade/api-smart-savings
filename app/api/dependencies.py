@@ -58,7 +58,7 @@ def get_current_user(
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="No account found with this email address",
+            detail="No account found with this email.",
         )
 
     if user.is_deleted:

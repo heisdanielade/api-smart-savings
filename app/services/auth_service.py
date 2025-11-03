@@ -73,14 +73,14 @@ class AuthService:
                 EmailService.send_templated_email(
                     email_type=EmailType.VERIFICATION,
                     email_to=[user.email],
-                    code=verification_code,
+                    verification_code=verification_code,
                 )
             )
         else:
             await EmailService.send_templated_email(
                 email_type=EmailType.VERIFICATION,
                 email_to=[user.email],
-                code=verification_code,
+                verification_code=verification_code,
             )
 
     @staticmethod
@@ -108,12 +108,12 @@ class AuthService:
 
         if not existing_user:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Account does not exist"
+                status_code=status.HTTP_404_NOT_FOUND, detail="Account does not exist."
             )
 
         if existing_user.is_verified:
             raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT, detail="Account already verified"
+                status_code=status.HTTP_409_CONFLICT, detail="Account is already verified."
             )
 
         # Make expires_at timezone-aware
@@ -173,13 +173,13 @@ class AuthService:
         if not existing_user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Account does not exist",
+                detail="Account does not exist.",
             )
 
         if existing_user.is_verified:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Account is already verified",
+                detail="Account is already verified.",
             )
 
         verification_code = generate_secure_code()
@@ -227,14 +227,14 @@ class AuthService:
             if token_data.get("type") != "password_reset":
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid reset token",
+                    detail="Invalid reset token.",
                 )
 
             stmt = select(User).where(User.email == token_data["sub"])
             user = db.exec(stmt).first()
             if not user:
                 raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+                    status_code=status.HTTP_404_NOT_FOUND, detail="Account not found."
                 )
 
             user.password_hash = hash_password(reset_request.new_password)
@@ -270,7 +270,7 @@ class AuthService:
             logger.error(f"Password reset failed: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid or expired reset token",
+                detail="Invalid or expired reset token.",
             )
 
     @staticmethod
@@ -435,6 +435,7 @@ class AuthService:
         # Login can remove account deletion flag
         if existing_user.is_deleted:
             existing_user.is_deleted = False
+            existing_user.deleted_at = None
 
         expire = datetime.now(timezone.utc) + timedelta(
             seconds=settings.JWT_EXPIRATION_TIME

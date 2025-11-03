@@ -42,6 +42,11 @@ class EmailOnlyRequest(BaseModel):
 
     email: EmailStr
 
+class VerificationCodeOnlyRequest(BaseModel):
+    """Schema for otp-only requests like confirming account deletion."""
+
+    verification_code: str
+
 
 class ResetPasswordRequest(BaseModel):
     """Schema for password reset requests with token and new password validation."""

@@ -12,6 +12,7 @@ from app.utils.response import standard_response
 from app.api.dependencies import get_current_user
 from app.services.user_service import UserService
 from app.schemas.user_schemas import UserUpdate, ChangePasswordRequest
+from app.schemas.auth_schemas import VerificationCodeOnlyRequest
 
 router = APIRouter()
 
@@ -27,7 +28,7 @@ async def get_user_info(
     Returns basic information about the logged-in user including email, name, initial, role, and verification status.
 
     Args:
-        current_user (User): The authenticated user obtained from the request context.
+        None
 
     Returns:
         dict(str, Any): Success message with the user's profile details.
@@ -54,7 +55,7 @@ async def update_user_info(
     Partially update the currently authenticated user's details.
 
     Args:
-        current_user (User): The authenticated user obtained from the request context.
+        update_request (UserUpdate): Schema for partial updates to currently authenticated user.
 
     Returns:
         dict(str, Any): Success message indicating update.
@@ -64,7 +65,7 @@ async def update_user_info(
     """
     response = await UserService.update_user_details(update_request=update_request, current_user=current_user, db=db)
     msg = response.get("message")
-    
+
     return standard_response(
         status="success",
         message=msg,
@@ -79,8 +80,7 @@ async def change_user_password(request: Request, change_password_request: Change
 
     Args:
         change_password_request (ChangePasswordRequest): Schema for password change (current_password, new_password).
-        current_user (User): User model instance representing the authenticated user.
-        
+     
     Returns:
         dict(str, Any): Success message indicating password change.
 
@@ -94,6 +94,69 @@ async def change_user_password(request: Request, change_password_request: Change
         status="success",
         message="You have successfully changed your password."
     )
+
+
+@router.post("/request-delete", status_code=status.HTTP_200_OK)
+@limiter.limit("2/hour")
+async def request_account_deletion(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session)
+) -> dict[str, Any]:
+    """
+    Request a verification code for account deletion.
+
+    Sends a one-time verification code to the email of the currently authenticated user.
+    The code is required to confirm account deletion.
+
+    Args:
+        None
+
+    Returns:
+        dict(str, Any): Success message indicating that the verification code has been sent.
+
+    Raises:
+        HTTPException: 403 Forbidden if the account is already scheduled for deletion.
+        HTTPException: 429 Too Many Requests if the rate limit is exceeded.
+    """
+    await UserService.request_delete_account(current_user=current_user, db=db)
+    
+    return standard_response(
+        status="success",
+        message="Verification code sent to email, verify process to schedule account deletion."
+    )
+    
+@router.post("/schedule-delete", status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("2/hour")
+async def schedule_account_deletion(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    deletion_request: VerificationCodeOnlyRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session)
+) -> dict[str, Any]:
+    """
+    Verify the account deletion code and schedule the user's account for deletion.
+
+    Verifies the provided one-time code and, if valid, schedules the user's account
+    for deletion.
+
+    Args:
+        deletion_request (VerificationCodeOnlyRequest): The one-time code sent to the user's email.
+
+    Raises:
+        HTTPException: 400 Bad Request if the verification code is invalid or expired.
+        HTTPException: 403 Forbidden if the account is already scheduled for deletion.
+        HTTPException: 429 Too Many Requests if the rate limit is exceeded.
+    """
+    await UserService.schedule_account_delete(request=request, current_user=current_user, deletion_request=deletion_request, db=db)
+    
+    return standard_response(
+        status="success",
+        message="Your Account will be deleted in 14 days. You can login to cancel deletion."
+    )
+    
 
 
 @router.post("/gdpr-request", status_code=status.HTTP_202_ACCEPTED)
