@@ -23,7 +23,7 @@ class UserBase(SQLModel):
     __tablename__ = "app_user"
 
     id: Optional[int] = Field(default=None, primary_key=True)
-    email: EmailStr
+    email: EmailStr = Field(index=True, unique=True)
     full_name: Optional[str] = Field(default=None)
     password_hash: str
     role: Role = Field(default=Role.USER)
@@ -50,8 +50,10 @@ class User(UserBase, table=True):
 
     verification_code: Optional[str] = None
     verification_code_expires_at: Optional[datetime] = None
+    token_version: int = Field(default=0)    
     failed_login_attempts: int = Field(default=0)
     last_failed_login_at: Optional[datetime] = None
+
     deleted_at: Optional[datetime] = None
 
     def __setattr__(self, name, value) -> None:
