@@ -13,7 +13,7 @@ from app.db.session import get_session
 from app.models.user_model import User
 from app.utils.db_helpers import get_user_by_email
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/v1/auth/login")
 
 
 security = HTTPBasic()
@@ -48,29 +48,66 @@ def authenticate(credentials: HTTPBasicCredentials = Depends(security)):
 def get_current_user(
     token: str = Depends(oauth2_scheme), session: Session = Depends(get_session)
 ) -> User:
-    payload = decode_token(token)
-    user_email = payload.get("sub")
-    if not user_email:
+    """
+    Get the current authenticated user from the JWT token.
+    
+    Validates the JWT token from the Authorization header and returns the
+    corresponding user from the database. Verifies token version and account status.
+    
+    Args:
+        token: JWT token from Authorization header
+        session: Database session
+        
+    Returns:
+        User: Current authenticated user
+        
+    Raises:
+        HTTPException: 401 if token is invalid or user not found
+        HTTPException: 403 if account is deleted
+    """
+    try:
+        payload = decode_token(token)
+        user_email = payload.get("sub")
+        token_version = payload.get("ver")
+        
+        if not user_email:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication credentials",
+            )
+
+        user = get_user_by_email(email=user_email, db=session)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="No account found with this email",
+            )
+
+        if not user.is_verified:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Your account is not verified.",
+            )
+            
+        if user.is_deleted:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Your account is scheduled for deletion",
+            )
+
+        # Verify token version matches user's current version
+        if token_version != user.token_version:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token has been invalidated. Please log in again",
+            )
+
+        return user
+        
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials.",
+            detail="Could not validate credentials"
         )
-    user = get_user_by_email(email=user_email, db=session)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="No account found with this email.",
-        )
-
-    if not user.is_verified:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Your account is not verified.",
-        )
-
-    if user.is_deleted:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Your account is scheduled for deletion.",
-        )
-    return user

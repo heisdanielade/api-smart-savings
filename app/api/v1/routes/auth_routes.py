@@ -7,9 +7,11 @@ from sqlmodel import Session
 
 from app.core.rate_limiter import limiter
 from app.db.session import get_session
+from app.api.dependencies import get_current_user
 from app.schemas.auth_schemas import (EmailOnlyRequest, LoginRequest,
                                       RegisterRequest, ResetPasswordRequest,
                                       VerifyEmailRequest)
+from app.models.user_model import User
 from app.services.auth_service import AuthService
 from app.utils.response import standard_response
 
@@ -192,6 +194,37 @@ async def request_password_reset(
     return standard_response(
         status="success",
         message="If an account exists with this email, you will receive password reset instructions.",
+    )
+
+
+@router.post("/logout-all", status_code=status.HTTP_200_OK)
+@limiter.limit("3/minute")
+async def logout_all_devices(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session),
+) -> dict[str, Any]:
+    """
+    Logout from all devices by invalidating all existing tokens.
+    
+    Increments the user's token version, which invalidates all existing JWT tokens
+    across all devices. Requires authentication with a valid token.
+    
+    Returns:
+        dict[str, Any]: Success message confirming logout from all devices
+        
+    Raises:
+        HTTPException: 401 Unauthorized if not authenticated
+        HTTPException: 429 Too Many Requests if rate limit exceeded
+    """
+    await AuthService.logout_all_devices(
+        user=current_user,
+        db=db
+    )
+    
+    return standard_response(
+        status="success",
+        message="Successfully logged out from all devices"
     )
 
 

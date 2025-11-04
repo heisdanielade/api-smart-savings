@@ -273,6 +273,28 @@ class AuthService:
             )
 
     @staticmethod
+    async def logout_all_devices(
+        user: User,
+        db: Session,
+    ) -> None:
+        """
+        Invalidate all existing JWT tokens for a user.
+
+        Increments the user's token_version to invalidate all existing tokens
+        across all devices. Any subsequent requests with old tokens will be rejected.
+
+        Args:
+            user (User): Current authenticated user
+            db (Session): Database session
+
+        Note:
+            This action cannot be undone and will require all devices to re-authenticate.
+        """
+        # Increment token version to invalidate all existing tokens
+        user.token_version += 1
+        db.commit()
+
+    @staticmethod
     async def request_password_reset(
         email_only_req: EmailOnlyRequest,
         db: Session,
@@ -443,7 +465,11 @@ class AuthService:
         expire = datetime.now(timezone.utc) + timedelta(
             seconds=settings.JWT_EXPIRATION_TIME
         )
-        access_token = create_access_token({"sub": existing_user.email})
+        
+        access_token = create_access_token(
+            data={"sub": existing_user.email},
+            token_version=existing_user.token_version
+        )
 
         existing_user.last_login_at = datetime.now(timezone.utc)
 
