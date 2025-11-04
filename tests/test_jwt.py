@@ -18,13 +18,14 @@ def patch_jwt_constants(monkeypatch):
 def test_create_access_token_and_decode():
     """Ensure a token can be created and then decoded successfully."""
 
-    token = create_access_token({"sub": "user123"})
+    token = create_access_token({"sub": "user123"}, token_version=1)
     assert isinstance(token, str)
 
     payload = decode_token(token)
     assert payload["sub"] == "user123"
+    assert payload["ver"] == 1
     assert isinstance(payload["exp"], int)
-    assert set(payload.keys()) >= {"sub", "exp"}
+    assert set(payload.keys()) >= {"sub", "exp", "ver"}
 
     now = datetime.now(timezone.utc).timestamp()
     assert payload["exp"] == pytest.approx(now + jwt_module.EXPIRY, abs=2)
