@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     SMTP_USERNAME: Optional[str] = None
     SMTP_PASSWORD: Optional[str] = None
 
+    HARD_DELETE_RETENTION_DAYS: Optional[int] = 14
+    HARD_DELETE_CRON_INTERVAL_HOURS: Optional[int] = 24
+
     model_config = ConfigDict(env_file=".env")  # type: ignore
 
 

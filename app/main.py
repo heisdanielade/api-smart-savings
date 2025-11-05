@@ -2,6 +2,7 @@
 
 from contextlib import asynccontextmanager
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import Depends, FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
@@ -13,6 +14,7 @@ from starlette.middleware.cors import CORSMiddleware
 from app.api.dependencies import authenticate
 from app.api.routers import main_router
 from app.core.config import settings
+from app.core.cron_jobs import hard_delete_expired_users
 from app.core.logging import LoggingMiddleware, cleanup_old_logs
 from app.core.rate_limiter import limiter
 from app.db.init_db import delete_test_accounts, init_test_accounts
@@ -31,9 +33,24 @@ async def lifespan(app: FastAPI):
         init_test_accounts()
     cleanup_old_logs()
 
+    # Initialize and start the scheduler for cron jobs
+    scheduler = AsyncIOScheduler()
+    cron_interval_hours = settings.HARD_DELETE_CRON_INTERVAL_HOURS
+    
+    scheduler.add_job(
+        hard_delete_expired_users,
+        "interval",
+        hours=cron_interval_hours,
+        id="hard_delete_expired_users",
+        replace_existing=True,
+    )
+    scheduler.start()
+    print(f"[STARTUP INFO] (i) Hard delete cron job scheduled to run every {cron_interval_hours} hour(s)\n", flush=True)
+
     yield  # App Runs
 
     # Shutdown Events
+    scheduler.shutdown()
 
 
 # =======================================
