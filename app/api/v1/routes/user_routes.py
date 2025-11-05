@@ -194,6 +194,34 @@ async def schedule_account_deletion(
     
 
 
+@router.get("/login-history", status_code=status.HTTP_200_OK)
+@limiter.limit("10/minute")
+async def view_login_history(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session)
+) -> dict[str, Any]:
+    """
+    Retrieve login activity details for the current user.
+
+    Returns information about the user's last successful login,
+    failed login attempts, and account status.
+
+    Returns:
+        dict[str, Any]: Success response with login activity details
+
+    Raises:
+        HTTPException: 429 Too Many Requests if rate limit exceeded
+    """
+    history = await UserService.get_login_history(current_user=current_user)
+    
+    return standard_response(
+        status="success",
+        message="Login history retrieved successfully",
+        data=history
+    )
+
+
 @router.post("/gdpr-request", status_code=status.HTTP_202_ACCEPTED)
 @limiter.limit("2/hour")
 async def request_user_data_gdpr(request: Request, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user), db: Session = Depends(get_session)) -> dict[str, Any]:

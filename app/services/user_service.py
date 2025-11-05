@@ -264,8 +264,33 @@ class UserService:
                 email_type=EmailType.ACCOUNT_DELETION_SCHEDULED,
                 email_to=[current_user.email]
             )
+
+
+    @staticmethod
+    async def get_login_history(current_user: User) -> dict:
+        """
+        Get login activity details for a user.
         
+        Retrieves information about the user's login activity using existing 
+        fields: last successful login, failed attempts count, and last failed
+        login timestamp.
         
+        Args:
+            current_user (User): The user whose login history to retrieve
+            
+        Returns:
+            dict: Login activity details including last login, failed attempts, etc.
+        """
+        return {
+            "last_login": current_user.last_login_at,
+            "failed_attempts": current_user.failed_login_attempts,
+            "last_failed_attempt": current_user.last_failed_login_at,
+            "account_status": {
+                "is_enabled": current_user.is_enabled,
+                "is_verified": current_user.is_verified,
+                "is_deleted": current_user.is_deleted
+            }
+        } 
         
 
 # =========== TODO ===========
