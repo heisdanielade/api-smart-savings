@@ -172,40 +172,6 @@ async def request_account_deletion(
     )
     
 
-@router.post("/delete-account", status_code=status.HTTP_200_OK)
-@limiter.limit("2/hour")
-async def delete_account(
-    request: Request,
-    background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_session)
-) -> dict[str, Any]:
-    """
-    Delete the currently authenticated user's account.
-    
-    Marks the account for permanent deletion after 14 days. During this period, all login
-    attempts will be blocked and the user will need to contact support to restore access.
-    Sends a confirmation email with deletion schedule details.
-
-    Returns:
-        dict(str, Any): Success message with deletion schedule information
-
-    Raises:
-        HTTPException: 409 Conflict if account is already scheduled for deletion
-        HTTPException: 429 Too Many Requests if rate limit exceeded
-    """
-    await UserService.delete_account(
-        current_user=current_user,
-        db=db,
-        background_tasks=background_tasks
-    )
-    
-    return standard_response(
-        status="success",
-        message="Your account has been scheduled for deletion. It will be permanently deleted in 14 days."
-    )
-
-
 @router.post("/schedule-delete", status_code=status.HTTP_202_ACCEPTED)
 @limiter.limit("2/hour")
 async def schedule_account_deletion(
