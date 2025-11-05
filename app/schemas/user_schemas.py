@@ -28,3 +28,9 @@ class ChangePasswordRequest(BaseModel):
         if not any(c.isdigit() for c in v):
             raise ValueError("Password must contain at least one digit")
         return v
+
+
+class ChangeEmailRequest(BaseModel):
+    """Schema for changing user email address with password confirmation."""
+    new_email: EmailStr
+    password: str

@@ -9,7 +9,7 @@ from sqlmodel import Session
 from app.core.logging import logger
 from app.utils.exceptions import CustomException
 from app.models.user_model import User
-from app.schemas.user_schemas import UserUpdate, ChangePasswordRequest
+from app.schemas.user_schemas import UserUpdate, ChangePasswordRequest, ChangeEmailRequest
 from app.schemas.auth_schemas import VerificationCodeOnlyRequest
 from app.services.email_service import EmailService, EmailType
 from app.core.security import hash_password, verify_password, generate_secure_code
@@ -290,7 +290,80 @@ class UserService:
                 "is_verified": current_user.is_verified,
                 "is_deleted": current_user.is_deleted
             }
-        } 
+        }
+
+    @staticmethod
+    async def change_user_email(
+        change_email_request: ChangeEmailRequest,
+        current_user: User,
+        db: Session,
+        background_tasks=None
+    ) -> None:
+        """
+        Change the email address for the currently authenticated user.
+
+        Verifies that the new email is not already in use by another account.
+        Verifies the current password for security. Updates the email address in
+        the database, marks the user as unverified (since the new email needs
+        verification), invalidates all existing tokens by incrementing token_version,
+        generates a new verification code, and sends a verification email to the
+        new address.
+
+        Args:
+            change_email_request (ChangeEmailRequest): Schema containing the new email
+                address and password for confirmation.
+            current_user (User): The authenticated user requesting the email change.
+            db (Session): SQLModel session used to perform database operations.
+            background_tasks: Optional background tasks runner for async email sending.
+
+        Raises:
+            HTTPException: 409 Conflict if the new email is already in use.
+            HTTPException: 403 Forbidden if the provided password is invalid.
+            HTTPException: 400 Bad Request if the new email is the same as the current email.
+        """
+        new_email = change_email_request.new_email.lower().strip()
+        old_email = current_user.email.lower().strip()
+
+        if new_email == old_email:
+            CustomException._400_bad_request("The new email must be different from your current email.")
+
+        existing_user = get_user_by_email(email=new_email, db=db)
+        if existing_user:
+            CustomException._409_conflict("An account with this email already exists.")
+
+        if not verify_password(
+            plain_password=change_email_request.password,
+            hashed_password=current_user.password_hash
+        ):
+            CustomException._403_forbidden("Invalid password.")
+
+        existing_user = get_user_by_email(email=old_email, db=db)
+
+        verification_code = generate_secure_code()
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+
+        existing_user.email = new_email
+        existing_user.is_verified = False
+        existing_user.verification_code = verification_code
+        existing_user.verification_code_expires_at = expires_at
+        existing_user.token_version += 1
+
+        db.commit()
+        db.refresh(existing_user)
+
+        if background_tasks:
+            background_tasks.add_task(
+                EmailService.send_templated_email,
+                email_type=EmailType.VERIFICATION,
+                email_to=[new_email],
+                verification_code=verification_code
+            )
+        else:
+            await EmailService.send_templated_email(
+                email_type=EmailType.VERIFICATION,
+                email_to=[new_email],
+                verification_code=verification_code
+            ) 
         
 
 # =========== TODO ===========

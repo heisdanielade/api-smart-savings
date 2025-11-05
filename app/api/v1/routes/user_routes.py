@@ -11,7 +11,7 @@ from app.core.rate_limiter import limiter
 from app.utils.response import standard_response
 from app.api.dependencies import get_current_user
 from app.services.user_service import UserService
-from app.schemas.user_schemas import UserUpdate, ChangePasswordRequest
+from app.schemas.user_schemas import UserUpdate, ChangePasswordRequest, ChangeEmailRequest
 from app.schemas.auth_schemas import VerificationCodeOnlyRequest
 
 router = APIRouter()
@@ -93,6 +93,50 @@ async def change_user_password(request: Request, change_password_request: Change
     return standard_response(
         status="success",
         message="You have successfully changed your password."
+    )
+
+
+@router.post("/change-email", status_code=status.HTTP_200_OK)
+@limiter.limit("3/minute")
+async def change_user_email(
+    request: Request,
+    change_email_request: ChangeEmailRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session)
+) -> dict[str, Any]:
+    """
+    Change the email address for the currently authenticated user.
+
+    Updates the user's email address to a new one. Requires the new email address
+    and the current password for verification. The new email must not be already in
+    use by another account. After updating, the account will be marked as unverified,
+    all existing authentication tokens will be invalidated, and a verification code
+    will be sent to the new email address for confirmation.
+
+    Args:
+        change_email_request (ChangeEmailRequest): Schema containing the new email
+            address and password for confirmation.
+
+    Returns:
+        dict(str, Any): Success message indicating the email change request was processed.
+
+    Raises:
+        HTTPException: 400 Bad Request if the new email is the same as the current email.
+        HTTPException: 403 Forbidden if the provided password is invalid.
+        HTTPException: 409 Conflict if the new email is already in use by another account.
+        HTTPException: 429 Too Many Requests if the rate limit is exceeded.
+    """
+    await UserService.change_user_email(
+        change_email_request=change_email_request,
+        current_user=current_user,
+        db=db,
+        background_tasks=background_tasks
+    )
+    
+    return standard_response(
+        status="success",
+        message="Email change request processed. Please verify your new email address using the code sent to your new email."
     )
 
 
@@ -191,7 +235,6 @@ async def schedule_account_deletion(
         status="success",
         message="Your Account will be deleted in 14 days. You can login to cancel deletion."
     )
-    
 
 
 @router.get("/login-history", status_code=status.HTTP_200_OK)
