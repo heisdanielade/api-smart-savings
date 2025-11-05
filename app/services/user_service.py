@@ -151,6 +151,47 @@ class UserService:
         
         
     @staticmethod
+    async def delete_account(
+        current_user: User,
+        db: Session,
+        background_tasks=None
+    ) -> None:
+        """
+        Mark a user account for permanent deletion.
+        
+        Sets is_deleted flag and deleted_at timestamp, effectively starting a 14-day 
+        countdown before permanent deletion. All future login attempts will be blocked
+        for soft-deleted accounts. Sends a notification email about the deletion schedule.
+
+        Args:
+            current_user (User): The user requesting account deletion
+            db (Session): Database session for operations
+            background_tasks: Optional background tasks runner for async email sending
+
+        Raises:
+            HTTPException: 409 Conflict if account is already scheduled for deletion
+        """
+        if current_user.is_deleted:
+            CustomException._409_conflict("Account is already scheduled for deletion.")
+
+        current_user.is_deleted = True
+        current_user.deleted_at = datetime.now(timezone.utc)
+        db.commit()
+        
+        if background_tasks:
+            background_tasks.add_task(
+                EmailService.send_templated_email,
+                email_type=EmailType.ACCOUNT_DELETION_SCHEDULED,
+                email_to=[current_user.email]
+            )
+        else:
+            await EmailService.send_templated_email(
+                email_type=EmailType.ACCOUNT_DELETION_SCHEDULED,
+                email_to=[current_user.email]
+            )
+
+
+    @staticmethod
     async def schedule_account_delete(
         request: Request,
         current_user: User,
