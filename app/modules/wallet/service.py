@@ -1,16 +1,19 @@
 # app/modules/wallet/service.py
 
-from typing import Any
+from typing import Any, Optional
 from datetime import datetime, timezone
 
+from fastapi import BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.utils.exceptions import CustomException
 from app.modules.user.models import User
 from app.modules.wallet.models import Wallet, Transaction
-from app.modules.wallet.repository import WalletRepository
+from app.modules.wallet.repository import WalletRepository, TransactionRepository
 from app.modules.wallet.schemas import TransactionRequest
 from app.modules.shared.enums import TransactionType, TransactionStatus
+from app.modules.notifications.email.service import EmailNotificationService
+from app.modules.shared.enums import NotificationType
 
 
 class WalletService:
@@ -19,9 +22,14 @@ class WalletService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.wallet_repo = WalletRepository(db)
+        self.transaction_repo = TransactionRepository(db)
+        self.email_service = EmailNotificationService()
 
     async def deposit(
-        self, transaction_request: TransactionRequest, current_user: User
+        self,
+        transaction_request: TransactionRequest,
+        current_user: User,
+        background_tasks: Optional[BackgroundTasks] = None,
     ) -> dict[str, Any]:
         """
         Process a deposit transaction for the user's wallet.
@@ -40,30 +48,45 @@ class WalletService:
             HTTPException: 404 Not Found if the user's wallet does not exist.
             HTTPException: 400 Bad Request if the amount is invalid.
         """
-        # Validate amount (already validated in schema, but double-check)
-        if transaction_request.amount <= 0:
-            raise CustomException.e400_bad_request("Amount must be greater than zero.")
-
-        # Get or verify wallet exists
         wallet = await self.wallet_repo.get_wallet_by_user_id(current_user.id)
         if not wallet:
             raise CustomException.e404_not_found("Wallet not found. Please contact support.")
 
-        # Update wallet balance
-        new_balance = float(wallet.total_balance) + transaction_request.amount
+        new_balance = float(wallet.total_balance) + float(transaction_request.amount)
         wallet = await self.wallet_repo.update(wallet, {"total_balance": new_balance})
 
-        # Create transaction record
         transaction = Transaction(
-            amount=transaction_request.amount,
+            amount=float(transaction_request.amount),
             type=TransactionType.WALLET_DEPOSIT,
             status=TransactionStatus.COMPLETED,
             wallet_id=wallet.id,
             owner_id=current_user.id,
         )
-        self.db.add(transaction)
-        await self.db.commit()
-        await self.db.refresh(transaction)
+
+        transaction = await self.transaction_repo.create(transaction)
+
+        try:
+            full_name = current_user.full_name if current_user.full_name is not None else ""
+            currency = transaction_request.currency.value if transaction_request.currency is not None else getattr(current_user, "preferred_currency", "")
+
+            context = {
+                "full_name": full_name,
+                "transaction_id": str(transaction.id),
+                "transaction_amount": f"{float(transaction.amount):.4f}",
+                "transaction_date": transaction.created_at.isoformat(),
+                "updated_balance": f"{float(wallet.total_balance):.4f}",
+                "currency": currency,
+            }
+
+            await self.email_service.schedule(
+                self.email_service.send,
+                background_tasks=background_tasks,
+                notification_type=NotificationType.WALLET_DEPOSIT_NOTIFICATION,
+                recipients=[current_user.email],
+                context=context,
+            )
+        except Exception:
+            pass
 
         return {
             "balance": float(wallet.total_balance),
@@ -79,7 +102,10 @@ class WalletService:
         }
 
     async def withdraw(
-        self, transaction_request: TransactionRequest, current_user: User
+        self,
+        transaction_request: TransactionRequest,
+        current_user: User,
+        background_tasks: Optional[BackgroundTasks] = None,
     ) -> dict[str, Any]:
         """
         Process a withdrawal transaction from the user's wallet.
@@ -99,37 +125,51 @@ class WalletService:
             HTTPException: 404 Not Found if the user's wallet does not exist.
             HTTPException: 400 Bad Request if the amount is invalid or insufficient funds.
         """
-        # Validate amount (already validated in schema, but double-check)
-        if transaction_request.amount <= 0:
-            raise CustomException.e400_bad_request("Amount must be greater than zero.")
-
-        # Get or verify wallet exists
         wallet = await self.wallet_repo.get_wallet_by_user_id(current_user.id)
         if not wallet:
             raise CustomException.e404_not_found("Wallet not found. Please contact support.")
 
-        # Check sufficient balance
         available_balance = wallet.available_balance
-        if available_balance < transaction_request.amount:
+        if available_balance < float(transaction_request.amount):
             raise CustomException.e400_bad_request(
                 f"Insufficient funds. Available balance: {available_balance:.4f}"
             )
 
-        # Update wallet balance
-        new_balance = float(wallet.total_balance) - transaction_request.amount
-        await self.wallet_repo.update(wallet, {"total_balance": new_balance})
+        new_balance = float(wallet.total_balance) - float(transaction_request.amount)
+        wallet = await self.wallet_repo.update(wallet, {"total_balance": new_balance})
 
-        # Create transaction record
         transaction = Transaction(
-            amount=transaction_request.amount,
+            amount=float(transaction_request.amount),
             type=TransactionType.WALLET_WITHDRAWAL,
             status=TransactionStatus.COMPLETED,
             wallet_id=wallet.id,
             owner_id=current_user.id,
         )
-        self.db.add(transaction)
-        await self.db.commit()
-        await self.db.refresh(transaction)
+
+        transaction = await self.transaction_repo.create(transaction)
+
+        try:
+            full_name = current_user.full_name if current_user.full_name is not None else ""
+            currency = transaction_request.currency.value if transaction_request.currency is not None else getattr(current_user, "preferred_currency", "")
+
+            context = {
+                "full_name": full_name,
+                "transaction_id": str(transaction.id),
+                "transaction_amount": f"{float(transaction.amount):.4f}",
+                "transaction_date": transaction.created_at.isoformat(),
+                "updated_balance": f"{float(wallet.total_balance):.4f}",
+                "currency": currency,
+            }
+
+            await self.email_service.schedule(
+                self.email_service.send,
+                background_tasks=background_tasks,
+                notification_type=NotificationType.WALLET_WITHDRAWAL_NOTIFICATION,
+                recipients=[current_user.email],
+                context=context,
+            )
+        except Exception:
+            pass
 
         return {
             "balance": float(wallet.total_balance),
@@ -143,4 +183,3 @@ class WalletService:
                 "executed_at": transaction.executed_at.isoformat() if transaction.executed_at else None,
             },
         }
-

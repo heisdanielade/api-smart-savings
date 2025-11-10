@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from fastapi import Request, APIRouter, Depends, status
+from fastapi import Request, APIRouter, Depends, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infra.database.session import get_session
@@ -21,6 +21,7 @@ router = APIRouter()
 async def deposit(
     request: Request,
     transaction_request: TransactionRequest,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
@@ -45,7 +46,7 @@ async def deposit(
     """
     wallet_service = WalletService(db)
     result = await wallet_service.deposit(
-        transaction_request=transaction_request, current_user=current_user
+        transaction_request=transaction_request, current_user=current_user, background_tasks=background_tasks
     )
 
     return standard_response(
@@ -60,6 +61,7 @@ async def deposit(
 async def withdraw(
     request: Request,
     transaction_request: TransactionRequest,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
@@ -85,7 +87,7 @@ async def withdraw(
     """
     wallet_service = WalletService(db)
     result = await wallet_service.withdraw(
-        transaction_request=transaction_request, current_user=current_user
+        transaction_request=transaction_request, current_user=current_user, background_tasks=background_tasks
     )
 
     return standard_response(
