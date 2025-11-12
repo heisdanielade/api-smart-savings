@@ -344,7 +344,8 @@ class TestRequestExportOfData:
         gdpr_service.gdpr_repo.create_request.return_value = mock_gdpr_request
 
         # Execute - service now uses current_user directly
-        with patch("app.modules.gdpr.service.get_client_ip", return_value="127.0.0.1"):
+        with patch("app.modules.gdpr.service.get_client_ip", return_value="127.0.0.1"), \
+             patch("app.modules.gdpr.service.hash_ip", return_value="hashed_ip_value"):
             await gdpr_service.request_export_of_data(
                 mock_request, mock_user, background_tasks=None
             )
@@ -364,7 +365,8 @@ class TestRequestExportOfData:
         gdpr_service.gdpr_repo.create_request.return_value = mock_gdpr_request
 
         # Execute - service now uses current_user directly
-        with patch("app.modules.gdpr.service.get_client_ip", return_value="127.0.0.1"):
+        with patch("app.modules.gdpr.service.get_client_ip", return_value="127.0.0.1"), \
+             patch("app.modules.gdpr.service.hash_ip", return_value="hashed_ip_value"):
             await gdpr_service.request_export_of_data(
                 mock_request, mock_user, background_tasks=None
             )
