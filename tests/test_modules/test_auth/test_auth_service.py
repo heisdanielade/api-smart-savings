@@ -57,22 +57,22 @@ def mock_wallet_repo(mock_db_session):
 
 
 @pytest.fixture
-def mock_email_service():
-    """Create a mock email notification service."""
-    service = AsyncMock()
-    service.schedule = AsyncMock()
-    service.send = AsyncMock()
-    return service
+def mock_notification_manager():
+    """Create a mock notification manager."""
+    manager = AsyncMock()
+    manager.schedule = AsyncMock()
+    manager.send = AsyncMock()
+    return manager
 
 
 @pytest.fixture
-def auth_service(mock_db_session, mock_user_repo, mock_wallet_repo, mock_email_service):
+def auth_service(mock_user_repo, mock_wallet_repo, mock_notification_manager):
     """Create an AuthService instance with mocked dependencies."""
-    service = AuthService(mock_db_session)
-    service.user_repo = mock_user_repo
-    service.wallet_repo = mock_wallet_repo
-    service.email_service = mock_email_service
-    return service
+    return AuthService(
+        user_repo=mock_user_repo,
+        wallet_repo=mock_wallet_repo,
+        notification_manager=mock_notification_manager,
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -141,7 +141,7 @@ class TestRegisterNewUser:
 
     @pytest.mark.asyncio
     async def test_register_success(
-        self, auth_service, mock_user_repo, mock_email_service, background_tasks
+        self, auth_service, mock_user_repo, mock_notification_manager, background_tasks
     ):
         """Test successful user registration with valid data."""
         # Arrange
@@ -169,11 +169,11 @@ class TestRegisterNewUser:
         assert created_user_arg.verification_code is not None
         assert created_user_arg.verification_code_expires_at is not None
         assert verify_password("Test@123", created_user_arg.password_hash)
-        mock_email_service.schedule.assert_called_once()
+        mock_notification_manager.schedule.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_register_duplicate_email(
-        self, auth_service, mock_user_repo, mock_email_service, sample_user, background_tasks
+        self, auth_service, mock_user_repo, mock_notification_manager, sample_user, background_tasks
     ):
         """Test registration fails when email already exists."""
         # Arrange
@@ -187,11 +187,11 @@ class TestRegisterNewUser:
         assert exc_info.value.status_code == 409
         assert "already exists" in exc_info.value.detail.lower()
         mock_user_repo.create.assert_not_called()
-        mock_email_service.schedule.assert_not_called()
+        mock_notification_manager.schedule.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_register_email_normalization(
-        self, auth_service, mock_user_repo, mock_email_service, background_tasks
+        self, auth_service, mock_user_repo, mock_notification_manager, background_tasks
     ):
         """Test that email is normalized (lowercase, trimmed) during registration."""
         # Arrange
@@ -253,7 +253,7 @@ class TestVerifyUserEmail:
 
     @pytest.mark.asyncio
     async def test_verify_success(
-        self, auth_service, mock_user_repo, mock_wallet_repo, mock_email_service, sample_user, background_tasks
+        self, auth_service, mock_user_repo, mock_wallet_repo, mock_notification_manager, sample_user, background_tasks
     ):
         """Test successful email verification with valid code."""
         # Arrange
@@ -272,7 +272,7 @@ class TestVerifyUserEmail:
         assert updates["verification_code"] is None
         assert updates["verification_code_expires_at"] is None
         mock_wallet_repo.create.assert_called_once()
-        mock_email_service.schedule.assert_called_once()
+        mock_notification_manager.schedule.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_verify_user_not_found(
@@ -389,7 +389,7 @@ class TestResendVerificationCode:
 
     @pytest.mark.asyncio
     async def test_resend_success(
-        self, auth_service, mock_user_repo, mock_email_service, sample_user, background_tasks
+        self, auth_service, mock_user_repo, mock_notification_manager, sample_user, background_tasks
     ):
         """Test successful resend of verification code."""
         # Arrange
@@ -410,7 +410,7 @@ class TestResendVerificationCode:
         assert updates["verification_code"] != original_code
         assert len(updates["verification_code"]) == 6
         assert updates["verification_code_expires_at"] > datetime.now(timezone.utc)
-        mock_email_service.schedule.assert_called_once()
+        mock_notification_manager.schedule.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_resend_user_not_found(
@@ -458,7 +458,7 @@ class TestLoginExistingUser:
     @patch("app.modules.auth.service.get_location_from_ip")
     @patch("app.modules.auth.service.transform_time")
     async def test_login_success(
-        self, mock_transform_time, mock_get_location, auth_service, mock_user_repo, mock_email_service, verified_user, mock_request, background_tasks
+        self, mock_transform_time, mock_get_location, auth_service, mock_user_repo, mock_notification_manager, verified_user, mock_request, background_tasks
     ):
         """Test successful login with correct credentials."""
         # Arrange
@@ -483,7 +483,7 @@ class TestLoginExistingUser:
         assert updates["failed_login_attempts"] == 0
         assert updates["last_login_at"] is not None
         assert updates["last_failed_login_at"] is None
-        mock_email_service.schedule.assert_called_once()
+        mock_notification_manager.schedule.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_login_user_not_found(
@@ -540,7 +540,7 @@ class TestLoginExistingUser:
     @pytest.mark.asyncio
     @patch("app.modules.auth.service.get_location_from_ip")
     async def test_login_account_lock_after_max_attempts(
-        self, mock_get_location, auth_service, mock_user_repo, mock_email_service, verified_user, mock_request, background_tasks
+        self, mock_get_location, auth_service, mock_user_repo, mock_notification_manager, verified_user, mock_request, background_tasks
     ):
         """Test account gets locked after maximum failed login attempts."""
         # Arrange
@@ -558,12 +558,12 @@ class TestLoginExistingUser:
         update_call = mock_user_repo.update.call_args
         updates = update_call[0][1]
         assert updates["is_enabled"] is False
-        mock_email_service.send.assert_called_once()
+        mock_notification_manager.send.assert_called_once()
 
     @pytest.mark.asyncio
     @patch("app.modules.auth.service.get_location_from_ip")
     async def test_login_disabled_account(
-        self, mock_get_location, auth_service, mock_user_repo, mock_email_service, verified_user, mock_request, background_tasks
+        self, mock_get_location, auth_service, mock_user_repo, mock_notification_manager, verified_user, mock_request, background_tasks
     ):
         """Test login fails for disabled account."""
         # Arrange
@@ -579,7 +579,7 @@ class TestLoginExistingUser:
 
         assert exc_info.value.status_code == 403
         assert "disabled" in exc_info.value.detail.lower()
-        mock_email_service.send.assert_called_once()
+        mock_notification_manager.send.assert_called_once()
 
     @pytest.mark.asyncio
     @patch("app.modules.auth.service.get_location_from_ip")
@@ -659,7 +659,7 @@ class TestRequestPasswordReset:
 
     @pytest.mark.asyncio
     async def test_request_reset_success(
-        self, auth_service, mock_user_repo, mock_email_service, verified_user, background_tasks
+        self, auth_service, mock_user_repo, mock_notification_manager, verified_user, background_tasks
     ):
         """Test successful password reset request."""
         # Arrange
@@ -671,14 +671,14 @@ class TestRequestPasswordReset:
 
         # Assert
         mock_user_repo.get_by_email_or_none.assert_called_once_with("test@example.com")
-        mock_email_service.schedule.assert_called_once()
-        call_args = mock_email_service.schedule.call_args
+        mock_notification_manager.schedule.assert_called_once()
+        call_args = mock_notification_manager.schedule.call_args
         assert call_args[1]["notification_type"] == NotificationType.PASSWORD_RESET
         assert "reset_token" in call_args[1]["context"]
 
     @pytest.mark.asyncio
     async def test_request_reset_user_not_found(
-        self, auth_service, mock_user_repo, mock_email_service, background_tasks
+        self, auth_service, mock_user_repo, mock_notification_manager, background_tasks
     ):
         """Test password reset request for non-existent user (should not raise error)."""
         # Arrange
@@ -690,7 +690,7 @@ class TestRequestPasswordReset:
 
         # Assert
         mock_user_repo.get_by_email_or_none.assert_called_once()
-        mock_email_service.schedule.assert_not_called()
+        mock_notification_manager.schedule.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_request_reset_email_normalization(
@@ -714,7 +714,7 @@ class TestResetPassword:
     @pytest.mark.asyncio
     @patch("app.modules.auth.service.decode_token")
     async def test_reset_password_success(
-        self, mock_decode_token, auth_service, mock_user_repo, mock_email_service, verified_user, background_tasks
+        self, mock_decode_token, auth_service, mock_user_repo, mock_notification_manager, verified_user, background_tasks
     ):
         """Test successful password reset with valid token."""
         # Arrange
@@ -735,7 +735,7 @@ class TestResetPassword:
         assert verify_password(new_password, updates["password_hash"])
         assert updates["failed_login_attempts"] == 0
         assert updates["is_enabled"] is True
-        mock_email_service.schedule.assert_called_once()
+        mock_notification_manager.schedule.assert_called_once()
 
     @pytest.mark.asyncio
     @patch("app.modules.auth.service.decode_token")
