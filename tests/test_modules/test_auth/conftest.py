@@ -72,7 +72,10 @@ def mock_settings(monkeypatch):
     monkeypatch.setenv("IP_HASH_SALT", "test_salt")
     monkeypatch.setattr("app.core.security.hashing.SALT", "test_salt")
     monkeypatch.setattr("app.modules.auth.service.settings.MAX_FAILED_LOGIN_ATTEMPTS", 5)
-    monkeypatch.setattr("app.modules.auth.service.settings.JWT_EXPIRATION_TIME", 3600)
+    
+    monkeypatch.setattr("app.core.security.jwt.ALGORITHM", "HS256")
+    monkeypatch.setattr("app.core.security.jwt.KEY", "test_secret_key")
+    monkeypatch.setattr("app.core.security.jwt.EXPIRY", 3600)
 
 
 @pytest.fixture
