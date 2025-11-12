@@ -25,7 +25,7 @@ class EmailNotificationService(NotificationService):
         template_str = template_path.read_text()
         return Template(template_str).render(context)
 
-    async def _send_email(self, recipients: List[str], subject: str, template_path: str, context: Dict):
+    async def _send_email(self, recipients: List[str], subject: str, template_path: str, context: Dict, attachments: Optional[List[Dict]] = None):
         try:
             body = await self._render_template(template_path, context)
             message = MessageSchema(
@@ -33,6 +33,7 @@ class EmailNotificationService(NotificationService):
                 recipients=recipients,
                 body=body,
                 subtype=MessageType.html,
+                attachments=attachments or [],
             )
             await fm.send_message(message=message)
         except Exception:
@@ -62,7 +63,7 @@ class EmailNotificationService(NotificationService):
 
         return enriched
 
-    async def send(self, notification_type: NotificationType, recipients: List[str], context: Optional[Dict] = None):
+    async def send(self, notification_type: NotificationType, recipients: List[str], context: Optional[Dict] = None, attachments: Optional[List[Dict]] = None):
         context = context or {}
 
         if notification_type not in EMAIL_TEMPLATES:
@@ -95,4 +96,5 @@ class EmailNotificationService(NotificationService):
             subject=subject,
             template_path=template_info["template"],
             context=validated_context,
+            attachments=attachments,
         )

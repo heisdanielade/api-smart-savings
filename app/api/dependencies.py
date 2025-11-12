@@ -12,6 +12,7 @@ from app.core.security.jwt import decode_token
 from app.infra.database.session import get_session
 from app.modules.auth.service import AuthService
 from app.modules.gdpr.service import GDPRService
+from app.modules.gdpr.repository import GDPRRepository
 from app.modules.notifications.email.service import EmailNotificationService
 from app.modules.user.models import User
 from app.modules.user.repository import UserRepository
@@ -106,8 +107,9 @@ async def get_gdpr_service(db: AsyncSession = Depends(get_session)):
     """Dependency factory for gdpr service."""
     user_repo = UserRepository(db)
     wallet_repo = WalletRepository(db)
+    gdpr_repo = GDPRRepository(db)
     notification_manager = EmailNotificationService()
-    return GDPRService(user_repo, wallet_repo, notification_manager)
+    return GDPRService(user_repo, wallet_repo, gdpr_repo, notification_manager)
 
 async def get_wallet_service(db: AsyncSession = Depends(get_session)):
     """Dependency factory for wallet service."""

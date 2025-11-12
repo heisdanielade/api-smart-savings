@@ -83,7 +83,7 @@ async def schedule_account_deletion(
 async def request_data_export(request: Request, background_tasks: BackgroundTasks,
                                  current_user: User = Depends(get_current_user),
                                  gdpr_service: GDPRService = Depends(get_gdpr_service)) -> dict[str, Any]:
-    await gdpr_service.request_export_of_data(request=request, current_user=current_user)
+    await gdpr_service.request_export_of_data(request=request, current_user=current_user, background_tasks=background_tasks)
 
     return standard_response(
         status="success",

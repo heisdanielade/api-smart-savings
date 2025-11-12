@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from app.core.config import settings
 
@@ -41,4 +41,10 @@ class WalletTransactionContext(BaseEmailContext):
     transaction_date: str
     updated_balance: str
     currency: str
+
+
+class GDPRDataExportContext(BaseEmailContext):
+    """Context for GDPR data export email notification."""
+    full_name: Optional[str] = None
+    request_date: Optional[str] = None
 

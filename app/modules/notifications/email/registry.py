@@ -1,7 +1,8 @@
 # app/modules/notifications/email/registry.py
 
 from app.modules.notifications.schemas import (VerificationEmailContext, BaseEmailContext,
-                                               LoginNotificationContext, PasswordResetContext, WalletTransactionContext)
+                                               LoginNotificationContext, PasswordResetContext, WalletTransactionContext,
+                                               GDPRDataExportContext)
 from app.modules.shared.enums import NotificationType
 
 EMAIL_TEMPLATES = {
@@ -59,6 +60,11 @@ EMAIL_TEMPLATES = {
         "template": "account/account-disabled.html",
         "subject": "[{{app_name}}][Action Required] Account Disabled",
         "context_model": BaseEmailContext,
+    },
+    NotificationType.GDPR_DATA_EXPORT: {
+        "template": "gdpr/gdpr-data-export.html",
+        "subject": "[{{app_name}}] Your GDPR Data Export is Ready",
+        "context_model": GDPRDataExportContext,
     },
     NotificationType.WALLET_DEPOSIT_NOTIFICATION: {
         "template": "wallet/notify-wallet-deposit.html",

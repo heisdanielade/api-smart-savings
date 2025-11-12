@@ -12,7 +12,7 @@ class NotificationService(ABC):
     """Abstract base class for all notification channels."""
 
     @abstractmethod
-    async def send(self, notification_type: NotificationType, recipients: list[str], context: Optional[dict] = None):
+    async def send(self, notification_type: NotificationType, recipients: list[str], context: Optional[dict] = None, attachments: Optional[list] = None):
         pass
 
     async def schedule(
