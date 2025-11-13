@@ -10,7 +10,7 @@ from fastapi import Request, BackgroundTasks, UploadFile
 
 from app.core.config import settings
 from app.core.middleware.logging import logger
-from app.core.security.hashing import hash_ip
+from app.core.security.hashing import hash_ip, generate_random_password_hash
 from app.core.utils.exceptions import CustomException
 from app.core.utils.helpers import get_client_ip, generate_secure_code, transform_time
 from app.modules.auth.schemas import VerificationCodeOnlyRequest
