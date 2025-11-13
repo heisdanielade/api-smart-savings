@@ -37,7 +37,7 @@ class GDPRRequest(SQLModel, table=True):
     status: GDPRRequestStatus = Field(sa_column=Column(SQLEnum(GDPRRequestStatus, name="gdpr_request_status_enum"), nullable=False, server_default=GDPRRequestStatus.PROCESSING.value))
     refusal_reason: Optional[str] = None
 
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(sa_column=Column(DateTime(timezone=True), default=datetime.now(timezone.utc)))
     updated_at: Optional[datetime] = Field(
         sa_column=Column(
             DateTime(timezone=True),
