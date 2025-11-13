@@ -110,7 +110,7 @@ async def get_gdpr_service(db: AsyncSession = Depends(get_session)):
     gdpr_repo = GDPRRepository(db)
     transaction_repo = TransactionRepository(db)
     notification_manager = EmailNotificationService()
-    return GDPRService(user_repo, wallet_repo, gdpr_repo, notification_manager)
+    return GDPRService(user_repo, wallet_repo, gdpr_repo, transaction_repo, notification_manager)
 
 async def get_wallet_service(db: AsyncSession = Depends(get_session)):
     """Dependency factory for wallet service."""

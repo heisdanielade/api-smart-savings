@@ -47,4 +47,5 @@ class GDPRDataExportContext(BaseEmailContext):
     """Context for GDPR data export email notification."""
     full_name: Optional[str] = None
     request_date: Optional[str] = None
+    pdf_password: str = None
 

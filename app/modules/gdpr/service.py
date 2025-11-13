@@ -4,14 +4,15 @@ from decimal import Decimal
 from typing import Optional, Dict
 from datetime import datetime, timezone, timedelta
 from uuid import UUID
+from io import BytesIO
 
-from fastapi import Request, BackgroundTasks
+from fastapi import Request, BackgroundTasks, UploadFile
 
 from app.core.config import settings
 from app.core.middleware.logging import logger
-from app.core.security.hashing import hash_ip, generate_random_password_hash
+from app.core.security.hashing import hash_ip
 from app.core.utils.exceptions import CustomException
-from app.core.utils.helpers import get_client_ip, generate_secure_code
+from app.core.utils.helpers import get_client_ip, generate_secure_code, transform_time
 from app.modules.auth.schemas import VerificationCodeOnlyRequest
 from app.modules.user.models import User
 from app.modules.shared.enums import NotificationType, GDPRRequestType, GDPRRequestStatus
@@ -181,20 +182,21 @@ class GDPRService:
                 logger.error(f"User {user_id} not found for GDPR export")
                 return
 
-            # Generate data summary
-            data_summary = await self.generate_gdpr_summary(user)
-
-            password = generate_random_password_hash(8)
-            pdf_bytes = await create_gdpr_pdf(data_summary, password)
-
-            # Send email with PDF attachment
-            await self.send_gdpr_pdf_email(user.email, user.full_name, pdf_bytes, password)
             # Update GDPR request status
             gdpr_request = await self.gdpr_repo.get_by_id(gdpr_request_id)
             if gdpr_request:
                 await self.gdpr_repo.update_request(
                     gdpr_request, {"status": GDPRRequestStatus.COMPLETED}
                 )
+
+            # Generate data summary
+            data_summary = await self.generate_gdpr_summary(user)
+
+            password = generate_secure_code()
+            pdf_bytes = await create_gdpr_pdf(data_summary, password)
+
+            # Send email with PDF attachment
+            await self.send_gdpr_pdf_email(user.email, user.full_name, pdf_bytes, password)
 
             logger.info(f"GDPR data export completed for user {user_id}")
 
@@ -290,19 +292,20 @@ class GDPRService:
         """
         Send email with user data export PDF as an attachment.
         """
-        # Prepare attachment
+        # Create UploadFile from bytes (keeps PDF in memory)
         app_name = settings.APP_NAME
         filename = f"{app_name}_user_data_export_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.pdf"
-        attachment = {
-            "file": pdf_bytes,
-            "filename": filename,
-            "mimetype": "application/pdf",
-        }
+        
+        pdf_file = UploadFile(
+            file=BytesIO(pdf_bytes),
+            filename=filename,
+            headers={"content-type": "application/pdf"}
+        )
 
         # Prepare context
         context = {
             "full_name": full_name,
-            "request_date": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+            "request_date": transform_time(datetime.now(timezone.utc)),
             "pdf_password": password,
         }
 
@@ -311,6 +314,6 @@ class GDPRService:
             notification_type=NotificationType.GDPR_DATA_EXPORT,
             recipients=[user_email],
             context=context,
-            attachments=[attachment],
+            attachments=[pdf_file],
         )
 

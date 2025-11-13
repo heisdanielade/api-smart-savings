@@ -2,6 +2,7 @@
 
 from typing import Optional, Dict, List
 from datetime import datetime, timezone
+from fastapi import UploadFile
 from fastapi_mail import FastMail, MessageSchema, MessageType
 from jinja2 import Template
 from pydantic import ValidationError
@@ -25,7 +26,7 @@ class EmailNotificationService(NotificationService):
         template_str = template_path.read_text()
         return Template(template_str).render(context)
 
-    async def _send_email(self, recipients: List[str], subject: str, template_path: str, context: Dict, attachments: Optional[List[Dict]] = None):
+    async def _send_email(self, recipients: List[str], subject: str, template_path: str, context: Dict, attachments: Optional[List[UploadFile]] = None):
         try:
             body = await self._render_template(template_path, context)
             message = MessageSchema(
@@ -36,8 +37,8 @@ class EmailNotificationService(NotificationService):
                 attachments=attachments or [],
             )
             await fm.send_message(message=message)
-        except Exception:
-            logger.exception(f"Failed to send email '{subject}' to {mask_email(recipients[0])}")
+        except Exception as e:
+            logger.exception(f"Failed to send email '{subject}' to {mask_email(recipients[0])}: {e}")
 
     def _enrich_context(self, notification_type: NotificationType, context: Dict) -> Dict:
         """Autofill missing or computed context values."""
@@ -63,7 +64,7 @@ class EmailNotificationService(NotificationService):
 
         return enriched
 
-    async def send(self, notification_type: NotificationType, recipients: List[str], context: Optional[Dict] = None, attachments: Optional[List[Dict]] = None):
+    async def send(self, notification_type: NotificationType, recipients: List[str], context: Optional[Dict] = None, attachments: Optional[List[UploadFile]] = None):
         context = context or {}
 
         if notification_type not in EMAIL_TEMPLATES:

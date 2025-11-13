@@ -311,8 +311,11 @@ class TestSendGDPRPDFEmail:
         assert call_args.kwargs["context"]["pdf_password"] == password
         assert "attachments" in call_args.kwargs
         assert len(call_args.kwargs["attachments"]) == 1
-        assert call_args.kwargs["attachments"][0]["file"] == pdf_bytes
-        assert call_args.kwargs["attachments"][0]["mimetype"] == "application/pdf"
+        # Attachment should be an UploadFile object
+        attachment = call_args.kwargs["attachments"][0]
+        assert hasattr(attachment, 'filename')
+        assert attachment.filename.endswith('.pdf')
+        assert hasattr(attachment, 'file')
 
     @pytest.mark.asyncio
     async def test_send_gdpr_pdf_email_no_name(self, gdpr_service):
