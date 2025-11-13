@@ -37,12 +37,6 @@ class GDPRRepository:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def get_user_transactions(self, user_id: UUID) -> List[Transaction]:
-        """Retrieve all transactions for a given user."""
-        stmt = select(Transaction).where(Transaction.owner_id == user_id).order_by(Transaction.created_at.desc())
-        result = await self.db.execute(stmt)
-        return list(result.scalars().all())
-
     async def get_user_gdpr_requests(self, user_id: UUID) -> List[GDPRRequest]:
         """Retrieve all GDPR requests for a given user."""
         stmt = select(GDPRRequest).where(GDPRRequest.user_id == user_id).order_by(GDPRRequest.created_at.desc())

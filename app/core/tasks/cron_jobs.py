@@ -45,7 +45,7 @@ async def anonymize_soft_deleted_users() -> None:
             user.email = f"deleted_{user.id}@anonymized.local"
             user.is_anonymized = True
             user.role = Role.DELETED_USER
-            user.password_hash =  generate_random_password_hash()
+            user.password_hash =  generate_random_password_hash(32)
             user.preferred_language = None
             user.last_login_at = None
             user.last_failed_login_at = None

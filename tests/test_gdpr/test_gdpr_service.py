@@ -5,6 +5,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone
 from uuid import uuid4
 
+from app.modules.gdpr.helpers import create_gdpr_pdf
+
 from app.modules.gdpr.service import GDPRService
 from app.modules.user.models import User
 from app.modules.wallet.models import Wallet, Transaction
@@ -96,10 +98,10 @@ def gdpr_service():
     user_repo = AsyncMock()
     wallet_repo = AsyncMock()
     gdpr_repo = AsyncMock()
+    transaction_repo = AsyncMock()
     notification_manager = AsyncMock()
 
-    return GDPRService(user_repo, wallet_repo, gdpr_repo, notification_manager)
-
+    return GDPRService(user_repo, wallet_repo, gdpr_repo, transaction_repo, notification_manager)
 
 class TestGenerateGDPRSummary:
     """Tests for generate_gdpr_summary method."""
@@ -111,7 +113,7 @@ class TestGenerateGDPRSummary:
         """Test successful GDPR summary generation."""
         # Setup mocks
         gdpr_service.wallet_repo.get_wallet_by_user_id.return_value = mock_wallet
-        gdpr_service.gdpr_repo.get_user_transactions.return_value = [mock_transaction]
+        gdpr_service.transaction_repo.get_user_transactions.return_value = [mock_transaction]
         gdpr_service.gdpr_repo.get_user_gdpr_requests.return_value = [mock_gdpr_request]
 
         # Execute - now passing User object instead of user_id
@@ -214,7 +216,7 @@ class TestCreateGDPRPDF:
         }
 
         # Execute
-        pdf_bytes = await gdpr_service.create_gdpr_pdf(data_summary, "test")
+        pdf_bytes = await create_gdpr_pdf(data_summary, "test")
 
         # Verify
         assert pdf_bytes is not None
@@ -274,7 +276,7 @@ class TestCreateGDPRPDF:
         }
 
         # Execute
-        pdf_bytes = await gdpr_service.create_gdpr_pdf(data_summary, "test")
+        pdf_bytes = await create_gdpr_pdf(data_summary, "test")
 
         # Verify
         assert pdf_bytes is not None

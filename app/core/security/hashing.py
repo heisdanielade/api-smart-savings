@@ -24,12 +24,12 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 
-def generate_random_password_hash() -> str:
+def generate_random_password_hash(length: int) -> str:
     """
     Generate a secure random password hash that cannot be used to log in.
     """
     # Generate 32 random bytes
-    random_bytes = os.urandom(32)
+    random_bytes = os.urandom(length)
 
     # Hash using bcrypt
     hashed = bcrypt.hashpw(random_bytes, bcrypt.gensalt())

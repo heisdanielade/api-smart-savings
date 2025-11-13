@@ -1,6 +1,6 @@
 # app/modules/wallet/repository.py
 
-from typing import Optional, Any, Coroutine
+from typing import Optional, Any, Coroutine, List
 from uuid import UUID
 
 from sqlalchemy.future import select
@@ -56,3 +56,9 @@ class TransactionRepository:
         stmt = select(Transaction).where(Transaction.id == trans_id)
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def get_user_transactions(self, user_id: UUID) -> List[Transaction]:
+        """Retrieve all transactions for a given user."""
+        stmt = select(Transaction).where(Transaction.owner_id == user_id).order_by(Transaction.created_at.desc())
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())

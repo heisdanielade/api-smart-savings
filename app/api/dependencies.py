@@ -108,6 +108,7 @@ async def get_gdpr_service(db: AsyncSession = Depends(get_session)):
     user_repo = UserRepository(db)
     wallet_repo = WalletRepository(db)
     gdpr_repo = GDPRRepository(db)
+    transaction_repo = TransactionRepository(db)
     notification_manager = EmailNotificationService()
     return GDPRService(user_repo, wallet_repo, gdpr_repo, notification_manager)
 
