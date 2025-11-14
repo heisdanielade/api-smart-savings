@@ -13,3 +13,10 @@ class TransactionRequest(BaseModel):
     amount: PositiveFloat
     currency: Optional[Currency] = None
 
+
+class WalletBalanceResponse(BaseModel):
+    """Schema for wallet balance response."""
+    total_balance: float
+    locked_amount: float
+    available_balance: float
+

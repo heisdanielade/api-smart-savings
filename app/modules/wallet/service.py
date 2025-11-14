@@ -76,6 +76,49 @@ class WalletService:
             }
         }
 
+    async def get_balance(self, current_user: User) -> dict[str, Any]:
+        """
+        Get the wallet balance for the current user.
+
+        Args:
+            current_user (User): The authenticated user.
+
+        Returns:
+            dict[str, Any]: A dictionary with wallet balance details.
+        """
+        wallet = await self.wallet_repo.get_wallet_by_user_id(current_user.id)
+        if not wallet:
+            raise CustomException.e404_not_found("Wallet not found. Please contact support.")
+
+        return {
+            "total_balance": float(wallet.total_balance),
+            "locked_amount": float(wallet.locked_amount),
+            "available_balance": wallet.available_balance,
+        }
+
+    async def get_transactions(self, current_user: User) -> list[dict[str, Any]]:
+        """
+        Get all transactions for the current user.
+
+        Args:
+            current_user (User): The authenticated user.
+
+        Returns:
+            list[dict[str, Any]]: A list of user's transactions.
+        """
+        transactions = await self.transaction_repo.get_user_transactions(current_user.id)
+        return [
+            {
+                "id": str(tx.id),
+                "amount": float(tx.amount),
+                "type": tx.type.value,
+                "status": tx.status.value,
+                "created_at": tx.created_at.isoformat(),
+                "executed_at": tx.executed_at.isoformat() if tx.executed_at else None,
+            }
+            for tx in transactions
+        ]
+
     async def deposit(
         self,
         transaction_request: TransactionRequest,

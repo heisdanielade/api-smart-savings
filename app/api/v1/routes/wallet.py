@@ -8,9 +8,35 @@ from app.core.middleware.rate_limiter import limiter
 from app.core.utils.response import standard_response
 from app.api.dependencies import get_current_user, get_wallet_service
 from app.modules.wallet.service import WalletService
-from app.modules.wallet.schemas import TransactionRequest
+from app.modules.wallet.schemas import TransactionRequest, WalletBalanceResponse
 
 router = APIRouter()
+
+
+@router.get("/balance", status_code=status.HTTP_200_OK, response_model=WalletBalanceResponse)
+@limiter.limit("10/minute")
+async def get_wallet_balance(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    wallet_service: WalletService = Depends(get_wallet_service),
+) -> dict[str, Any]:
+    """
+    Get the wallet balance for the authenticated user.
+    """
+    return await wallet_service.get_balance(current_user)
+
+
+@router.get("/transactions", status_code=status.HTTP_200_OK)
+@limiter.limit("10/minute")
+async def get_wallet_transactions(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    wallet_service: WalletService = Depends(get_wallet_service),
+) -> list[dict[str, Any]]:
+    """
+    Get all transactions for the authenticated user.
+    """
+    return await wallet_service.get_transactions(current_user)
 
 
 @router.post("/deposit", status_code=status.HTTP_200_OK)
