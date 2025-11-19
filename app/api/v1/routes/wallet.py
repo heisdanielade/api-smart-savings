@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from fastapi import Request, APIRouter, Depends, status, BackgroundTasks
+from fastapi import Request, APIRouter, Depends, status, BackgroundTasks, Query
 from app.modules.user.models import User
 from app.core.middleware.rate_limiter import limiter
 from app.core.utils.response import standard_response
@@ -30,13 +30,26 @@ async def get_wallet_balance(
 @limiter.limit("10/minute")
 async def get_wallet_transactions(
     request: Request,
+    page: int = Query(1, ge=1, description="Page number (1-based)."),
+    page_size: int = Query(20, ge=1, le=100, description="Items per page (max 100)."),
     current_user: User = Depends(get_current_user),
     wallet_service: WalletService = Depends(get_wallet_service),
 ) -> dict[str, Any]:
+    """Retrieve a paginated list of wallet transactions for the authenticated user.
+
+    Query Parameters:
+        page (int): Page number starting at 1. Defaults to 1.
+        page_size (int): Number of transactions per page. Defaults to 20. Max 100.
+
+    Returns:
+        dict[str, Any]: Standard response containing paginated transaction data with keys:
+            - transactions: list of transaction objects ordered by most recent first
+            - page: current page
+            - page_size: items per page
+            - total_pages: total number of pages available
+            - total_transactions: total number of transactions
     """
-    Get all transactions for the authenticated user.
-    """
-    response = await wallet_service.get_transactions(current_user)
+    response = await wallet_service.get_transactions(current_user, page=page, page_size=page_size)
     return standard_response(message="Transaction history retrieved successfully.", data=response)
 
 

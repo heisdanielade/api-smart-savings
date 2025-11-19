@@ -96,18 +96,36 @@ class WalletService:
             "available_balance": wallet.available_balance,
         }
 
-    async def get_transactions(self, current_user: User) -> list[dict[str, Any]]:
-        """
-        Get all transactions for the current user.
+    async def get_transactions(self, current_user: User, page: int, page_size: int) -> dict[str, Any]:
+        """Return a paginated list of transactions for the current user.
+
+        Transactions are ordered by creation timestamp descending (most recent first).
 
         Args:
             current_user (User): The authenticated user.
+            page (int): Page number (1-based).
+            page_size (int): Number of items per page.
 
         Returns:
-            list[dict[str, Any]]: A list of user's transactions.
+            dict[str, Any]: Paginated transaction payload containing:
+                - transactions: list of transaction dicts
+                - page: current page number
+                - page_size: number of items per page
+                - total_pages: total pages available
+                - total_transactions: total transaction count
         """
-        transactions = await self.transaction_repo.get_user_transactions(current_user.id)
-        return [
+        total_transactions = await self.transaction_repo.get_user_transactions_count(current_user.id)
+
+        total_pages = (total_transactions + page_size - 1) // page_size if total_transactions > 0 else 0
+        offset = (page - 1) * page_size
+        if total_pages and page > total_pages:
+            transactions = []
+        else:
+            transactions = await self.transaction_repo.get_user_transactions_paginated(
+                current_user.id, offset=offset, limit=page_size
+            )
+
+        tx_payload = [
             {
                 "id": str(tx.id),
                 "amount": float(tx.amount),
@@ -118,6 +136,14 @@ class WalletService:
             }
             for tx in transactions
         ]
+
+        return {
+            "transactions": tx_payload,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages,
+            "total_transactions": total_transactions,
+        }
 
     async def deposit(
         self,
