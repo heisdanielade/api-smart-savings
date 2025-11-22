@@ -7,6 +7,7 @@ from fastapi.openapi.utils import get_openapi
 from slowapi.errors import RateLimitExceeded
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.cors import CORSMiddleware
+from datetime import datetime
 
 from app.core.setup.instance import application
 from app.api.dependencies import authenticate_admin
@@ -15,6 +16,7 @@ from app.core.config import settings
 from app.core.middleware.logging import LoggingMiddleware
 from app.core.utils import error_handlers
 from app.core.utils.response import standard_response
+from app.core.utils.helpers import get_uptime, get_latest_response_latency, get_system_metrics, get_db_status
 
 
 app_name = settings.APP_NAME
@@ -89,3 +91,21 @@ async def custom_redoc_ui(authenticated: bool = Depends(authenticate_admin)):
 @main_app.get("/docs/openapi.json", include_in_schema=False)
 async def openapi_json(authenticated: bool = Depends(authenticate_admin)):
     return get_openapi(title=f"{app_name} API Docs", version=app_version or "n/a", routes=main_app.routes)
+
+
+@main_app.get("/health", include_in_schema=False)
+async def health_check():
+    """
+    Health check endpoint.
+    """
+    return standard_response(
+        status="success",
+        message="API health status",
+        data= {
+            "uptime": 'get_uptime(startup_time)',
+            "hostname": settings.DB_HOST,
+            "db_status": "running" if await get_db_status() else "down",
+            "system_metrics": get_system_metrics(),
+            "last_request_latency_ms": get_latest_response_latency(),
+        }
+    )

@@ -6,6 +6,15 @@ from zoneinfo import ZoneInfo
 import secrets
 import string
 import httpx
+import psutil
+
+from sqlmodel import select
+
+from app.infra.database.session import AsyncSessionLocal
+
+
+# Global variable to track the latest request latency
+latest_request_latency: float = 0.0
 
 
 def generate_secure_code(length=6):
@@ -69,3 +78,54 @@ async def get_location_from_ip(ip: str) -> str:
         return "Unknown location"
     except Exception:
         return "Unknown location"
+
+def get_uptime(start_time: datetime) -> str:
+    """
+    Calculate uptime from start_time to now.
+    """
+    now = datetime.now()
+    delta = now - start_time
+    days, seconds = divmod(delta.total_seconds(), 86400)
+    hours, seconds = divmod(seconds, 3600)
+    minutes, seconds = divmod(seconds, 60)
+    
+    return f"{days}d {int(hours)}h {int(minutes)}m {int(seconds)}s"
+
+def set_latest_response_latency(latency: float) -> None:
+    """
+    Set the latest response latency value (in milliseconds).
+    This is called by the logging middleware after each request.
+    """
+    global latest_request_latency
+    latest_request_latency = latency
+
+def get_latest_response_latency() -> float:
+    """
+    Return the latest response latency in milliseconds.
+    """
+    return latest_request_latency
+
+def get_system_metrics() -> dict:
+    """
+    Gather basic system metrics like CPU and memory usage.
+    """
+    cpu_usage = psutil.cpu_percent(interval=0.5)
+    memory = psutil.virtual_memory()
+    memory_usage = memory.percent
+
+    return {
+        "cpu_usage_percent": cpu_usage,
+        "memory_usage_percent": memory_usage,
+    }
+
+async def get_db_status() -> bool:
+    """
+    Check database connectivity status.
+    """
+
+    async with AsyncSessionLocal() as session:
+        try:
+            session.execute(select(1))
+            return True
+        except Exception:
+            return False
