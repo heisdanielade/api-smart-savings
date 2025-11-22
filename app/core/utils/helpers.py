@@ -10,8 +10,6 @@ import psutil
 
 from sqlmodel import select
 
-from app.infra.database.session import AsyncSessionLocal
-
 
 # Global variable to track the latest request latency
 latest_request_latency: float = 0.0
@@ -122,6 +120,8 @@ async def get_db_status() -> bool:
     """
     Check database connectivity status.
     """
+    # Import here to avoid initializing the database at module import time
+    from app.infra.database.session import AsyncSessionLocal
 
     async with AsyncSessionLocal() as session:
         try:
