@@ -117,7 +117,7 @@ async def delete_group(
 
 
 # Member Management Endpoints
-@router.post("/{group_id}/add-member", response_model=GroupMemberRead, status_code=status.HTTP_201_CREATED)
+@router.post("/{group_id}/add-member", status_code=status.HTTP_201_CREATED)
 async def add_group_member(
     group_id: uuid.UUID,
     member_in: GroupMemberCreate,
@@ -137,10 +137,14 @@ async def add_group_member(
     if any(member.user_id == member_in.user_id for member in members):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User is already a member")
 
-    return await repo.add_member_to_group(group_id, member_in.user_id)
+    await repo.add_member_to_group(group_id, member_in.user_id)
+    return JSONResponse(
+        status_code=status.HTTP_201_CREATED,
+        content={"message": "Member added successfully"},
+    )
 
 
-@router.post("/{group_id}/remove-member", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{group_id}/remove-member", status_code=status.HTTP_200_OK)
 async def remove_group_member(
     group_id: uuid.UUID,
     member_in: GroupMemberCreate,
@@ -149,7 +153,7 @@ async def remove_group_member(
 ):
     """
     Remove a member from a group. Only the group admin can perform this action.
-    The admin cannot be removed.
+    The admin cannot remove themselves.
     """
     group = await repo.get_group_by_id(group_id)
     if not group:
@@ -160,8 +164,14 @@ async def remove_group_member(
     if member_in.user_id == group.admin_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Admin cannot be removed")
 
-    if not await repo.remove_member_from_group(group_id, member_in.user_id):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
+    removed = await repo.remove_member_from_group(group_id, member_in.user_id)
+    if removed:
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={"message": "Member removed successfully"},
+        )
+
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found in this group")
 
 
 # Transaction Endpoints
