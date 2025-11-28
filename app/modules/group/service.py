@@ -1,19 +1,18 @@
 # app/modules/group/service.py
 
 import uuid
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_session
-from app.api.dependencies  import get_current_user
+from app.api.dependencies import get_session, get_current_user
 from app.modules.group.repository import GroupRepository
 from app.modules.group.schemas import (
     GroupCreate,
     GroupDetailsRead,
     GroupMemberCreate,
-    GroupMemberRead,
     GroupRead,
     GroupTransactionMessageCreate,
     GroupTransactionMessageRead,
@@ -21,6 +20,8 @@ from app.modules.group.schemas import (
 )
 from app.modules.shared.enums import GroupRole
 from app.modules.user.models import User
+from app.modules.wallet.repository import WalletRepository, TransactionRepository
+
 
 router = APIRouter()
 
@@ -36,6 +37,22 @@ def get_group_repo(session: AsyncSession = Depends(get_session)) -> GroupReposit
         GroupRepository: An instance of the group repository.
     """
     return GroupRepository(session)
+
+
+def get_wallet_repo(session: AsyncSession = Depends(get_session)) -> WalletRepository:
+    """
+    Dependency to get the wallet repository.
+    """
+    return WalletRepository(session)
+
+
+def get_transaction_repo(
+    session: AsyncSession = Depends(get_session),
+) -> TransactionRepository:
+    """
+    Dependency to get the transaction repository.
+    """
+    return TransactionRepository(session)
 
 
 # Group Management Endpoints
@@ -175,56 +192,110 @@ async def remove_group_member(
 
 
 # Transaction Endpoints
-@router.post("/{group_id}/contribute", response_model=GroupTransactionMessageRead, status_code=status.HTTP_201_CREATED)
+@router.post("/{group_id}/contribute", status_code=status.HTTP_201_CREATED)
 async def contribute_to_group(
     group_id: uuid.UUID,
     transaction_in: GroupTransactionMessageCreate,
     repo: GroupRepository = Depends(get_group_repo),
+    wallet_repo: WalletRepository = Depends(get_wallet_repo),
     current_user: User = Depends(get_current_user),
 ):
     """
-    Contribute funds to a group. Only members of the group can contribute.
+    Contribute funds to a group. This action is atomic and will either
+    debit the user's wallet and credit the group, or fail without
+    changing any balances.
     """
     group = await repo.get_group_by_id(group_id)
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
 
     members = await repo.get_group_members(group_id)
-    if not any(m.user_id == current_user.id for m in members):
+    if not any(str(m.user_id) == str(current_user.id) for m in members):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a member of this group")
 
-    return await repo.create_group_transaction_message(
-        group_id, current_user.id, transaction_in.amount, transaction_in.type
+    wallet = await wallet_repo.get_wallet_by_user_id(current_user.id)
+    if not wallet:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User wallet not found")
+
+    amount_to_contribute = Decimal(str(transaction_in.amount))
+    if amount_to_contribute <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Contribution amount must be positive",
+        )
+
+    if wallet.available_balance < amount_to_contribute:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Insufficient funds")
+
+    await repo.create_contribution(
+        group=group,
+        wallet=wallet,
+        user_id=current_user.id,
+        amount=amount_to_contribute,
+    )
+
+    return JSONResponse(
+        status_code=status.HTTP_201_CREATED,
+        content={"message": "Contribution successful"},
     )
 
 
 @router.post(
     "/{group_id}/remove-contribution",
-    response_model=GroupTransactionMessageRead,
     status_code=status.HTTP_201_CREATED,
 )
 async def remove_contribution(
     group_id: uuid.UUID,
     transaction_in: GroupTransactionMessageCreate,
     repo: GroupRepository = Depends(get_group_repo),
+    wallet_repo: WalletRepository = Depends(get_wallet_repo),
     current_user: User = Depends(get_current_user),
 ):
     """
-    Remove funds from a group. This action may require admin approval
-    depending on the group's settings.
+    Withdraw funds from a group. This action is atomic and will either
+    credit the user's wallet and debit the group, or fail without
+    changing any balances.
     """
     group = await repo.get_group_by_id(group_id)
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
 
     members = await repo.get_group_members(group_id)
-    member = next((m for m in members if m.user_id == current_user.id), None)
+    member = next((m for m in members if str(m.user_id) == str(current_user.id)), None)
     if not member:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a member of this group")
 
     if group.require_admin_approval_for_funds_removal and member.role != GroupRole.ADMIN:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin approval required for withdrawal")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin approval required for withdrawal",
+        )
 
-    return await repo.create_group_transaction_message(
-        group_id, current_user.id, -transaction_in.amount, transaction_in.type
+    wallet = await wallet_repo.get_wallet_by_user_id(current_user.id)
+    if not wallet:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User wallet not found")
+
+    amount_to_withdraw = Decimal(str(transaction_in.amount))
+    if amount_to_withdraw <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Withdrawal amount must be positive",
+        )
+
+    if group.current_balance < amount_to_withdraw:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Insufficient funds in the group",
+        )
+
+    await repo.create_withdrawal(
+        group=group,
+        wallet=wallet,
+        user_id=current_user.id,
+        amount=amount_to_withdraw,
+    )
+
+    return JSONResponse(
+        status_code=status.HTTP_201_CREATED,
+        content={"message": "Withdrawal successful"},
     )
