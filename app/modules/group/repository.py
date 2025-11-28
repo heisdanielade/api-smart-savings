@@ -5,6 +5,7 @@ from typing import List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload
 
 from app.modules.group.models import Group, GroupMember, GroupTransactionMessage
 from app.modules.group.schemas import GroupCreate, GroupUpdate
@@ -28,6 +29,7 @@ class GroupRepository:
         """
         new_group = Group(**group_data.dict(), admin_id=admin_id)
         self.session.add(new_group)
+        await self.session.flush()  # Flush to get the new_group.id
 
         admin_member = GroupMember(group_id=new_group.id, user_id=admin_id, role=GroupRole.ADMIN)
         self.session.add(admin_member)
@@ -38,7 +40,7 @@ class GroupRepository:
 
     async def get_group_by_id(self, group_id: uuid.UUID) -> Optional[Group]:
         """
-        Retrieves a group by its ID.
+        Retrieves a group by its ID, eagerly loading members and messages.
 
         Args:
             group_id (uuid.UUID): The ID of the group to retrieve.
@@ -46,7 +48,11 @@ class GroupRepository:
         Returns:
             Optional[Group]: The group object if found, otherwise None.
         """
-        result = await self.session.execute(select(Group).where(Group.id == group_id))
+        result = await self.session.execute(
+            select(Group)
+            .where(Group.id == group_id)
+            .options(selectinload(Group.members), selectinload(Group.messages))
+        )
         return result.scalars().first()
 
     async def update_group(self, group_id: uuid.UUID, group_update: GroupUpdate) -> Optional[Group]:
