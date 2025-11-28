@@ -234,9 +234,26 @@ async def contribute_to_group(
         amount=amount_to_contribute,
     )
 
+    updated_group = await repo.get_group_by_id(group_id)
+    updated_members = await repo.get_group_members(group_id)
+    current_member = next((m for m in updated_members if str(m.user_id) == str(current_user.id)), None)
+
     return JSONResponse(
         status_code=status.HTTP_201_CREATED,
-        content={"message": "Contribution successful"},
+        content={
+            "message": "Contribution successful",
+            "contribution": {
+                "amount": float(amount_to_contribute),
+                "user_id": str(current_user.id),
+            },
+            "group": {
+                "current_balance": float(updated_group.current_balance) if updated_group else 0.0,
+                "target_balance": float(updated_group.target_balance) if updated_group else 0.0,
+            },
+            "member": {
+                "total_contributed": float(current_member.contributed_amount) if current_member else 0.0,
+            }
+        },
     )
 
 
@@ -288,14 +305,37 @@ async def remove_contribution(
             detail="Insufficient funds in the group",
         )
 
-    await repo.create_withdrawal(
-        group=group,
-        wallet=wallet,
-        user_id=current_user.id,
-        amount=amount_to_withdraw,
-    )
+    try:
+        await repo.create_withdrawal(
+            group=group,
+            wallet=wallet,
+            user_id=current_user.id,
+            amount=amount_to_withdraw,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+    updated_group = await repo.get_group_by_id(group_id)
+    updated_members = await repo.get_group_members(group_id)
+    current_member = next((m for m in updated_members if str(m.user_id) == str(current_user.id)), None)
 
     return JSONResponse(
         status_code=status.HTTP_201_CREATED,
-        content={"message": "Withdrawal successful"},
+        content={
+            "message": "Withdrawal successful",
+            "withdrawal": {
+                "amount": float(amount_to_withdraw),
+                "user_id": str(current_user.id),
+            },
+            "group": {
+                "current_balance": float(updated_group.current_balance) if updated_group else 0.0,
+                "target_balance": float(updated_group.target_balance) if updated_group else 0.0,
+            },
+            "member": {
+                "total_contributed": float(current_member.contributed_amount) if current_member else 0.0,
+            }
+        },
     )

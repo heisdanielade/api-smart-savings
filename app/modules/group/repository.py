@@ -182,6 +182,16 @@ class GroupRepository:
             amount (Decimal): The amount to contribute.
         """
         try:
+            group = await self.get_group_by_id(group.id)
+            if not group:
+                raise ValueError("Group not found")
+
+            stmt = select(Wallet).where(Wallet.user_id == user_id)
+            result = await self.session.execute(stmt)
+            wallet = result.scalar_one_or_none()
+            if not wallet:
+                raise ValueError("Wallet not found")
+
             wallet.total_balance -= amount
             self.session.add(wallet)
 
@@ -190,13 +200,21 @@ class GroupRepository:
                 owner_id=user_id,
                 amount=-amount,
                 type=TransactionType.GROUP_SAVINGS_DEPOSIT,
-                description=f"Contribution to group: {group.name}",
+                description=f"Contribution to group: {group.id}",
                 status=TransactionStatus.COMPLETED,
             )
             self.session.add(wallet_transaction)
 
             group.current_balance += amount
             self.session.add(group)
+
+            result = await self.session.execute(
+                select(GroupMember).where(GroupMember.group_id == group.id, GroupMember.user_id == user_id)
+            )
+            member = result.scalars().first()
+            if member:
+                member.contributed_amount += amount
+                self.session.add(member)
 
             group_message = GroupTransactionMessage(
                 group_id=group.id,
@@ -230,8 +248,39 @@ class GroupRepository:
             amount (Decimal): The amount to withdraw.
         """
         try:
-            group.current_balance -= amount
-            self.session.add(group)
+            group = await self.get_group_by_id(group.id)
+            if not group:
+                raise ValueError("Group not found")
+
+            stmt = select(Wallet).where(Wallet.user_id == user_id)
+            result = await self.session.execute(stmt)
+            wallet = result.scalar_one_or_none()
+            if not wallet:
+                raise ValueError("Wallet not found")
+
+            result = await self.session.execute(
+                select(GroupMember).where(GroupMember.group_id == group.id, GroupMember.user_id == user_id)
+            )
+            member = result.scalars().first()
+            if not member:
+                raise ValueError("User is not a member of this group")
+            
+            if member.contributed_amount < amount:
+                raise ValueError(f"Cannot withdraw more than contributed amount ({member.contributed_amount})")
+            
+            from sqlalchemy import update
+
+            await self.session.execute(
+                update(GroupMember)
+                .where(GroupMember.id == member.id)
+                .values(contributed_amount=GroupMember.contributed_amount - amount)
+            )
+
+            await self.session.execute(
+                update(Group)
+                .where(Group.id == group.id)
+                .values(current_balance=Group.current_balance - amount)
+            )
 
             group_message = GroupTransactionMessage(
                 group_id=group.id,
@@ -241,15 +290,18 @@ class GroupRepository:
             )
             self.session.add(group_message)
 
-            wallet.total_balance += amount
-            self.session.add(wallet)
+            await self.session.execute(
+                update(Wallet)
+                .where(Wallet.id == wallet.id)
+                .values(total_balance=Wallet.total_balance + amount)
+            )
 
             wallet_transaction = Transaction(
                 wallet_id=wallet.id,
                 owner_id=user_id,
                 amount=amount,
                 type=TransactionType.GROUP_SAVINGS_WITHDRAWAL,
-                description=f"Withdrawal from group: {group.name}",
+                description=f"Withdrawal from group: {group.id}",
                 status=TransactionStatus.COMPLETED,
             )
             self.session.add(wallet_transaction)

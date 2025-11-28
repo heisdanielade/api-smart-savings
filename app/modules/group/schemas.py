@@ -66,13 +66,13 @@ class GroupMemberCreate(GroupMemberBase):
 class GroupMemberRead(GroupMemberBase):
     """Schema for reading group member data."""
 
-id: uuid.UUID
-group_id: uuid.UUID
-contributed_amount: float
-joined_at: datetime
+    id: uuid.UUID
+    group_id: uuid.UUID
+    contributed_amount: float
+    joined_at: datetime
 
-class Config:
-    orm_mode = True
+    class Config:
+        orm_mode = True
 
 
 # Group Transaction Schemas
