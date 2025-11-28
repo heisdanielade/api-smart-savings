@@ -1,6 +1,7 @@
 # app/modules/group/repository.py
 
 import uuid
+from decimal import Decimal
 from typing import List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,7 +10,8 @@ from sqlalchemy.orm import selectinload
 
 from app.modules.group.models import Group, GroupMember, GroupTransactionMessage
 from app.modules.group.schemas import GroupCreate, GroupUpdate
-from app.modules.shared.enums import GroupRole, TransactionType
+from app.modules.shared.enums import GroupRole, TransactionStatus, TransactionType
+from app.modules.wallet.models import Transaction, Wallet
 
 
 class GroupRepository:
@@ -162,6 +164,102 @@ class GroupRepository:
         result = await self.session.execute(select(GroupMember).where(GroupMember.group_id == group_id))
         return result.scalars().all()
 
+    async def create_contribution(
+        self, group: Group, wallet: Wallet, user_id: uuid.UUID, amount: Decimal
+    ) -> None:
+        """
+        Atomically handles a user's contribution to a group.
+
+        1. Decreases the user's wallet balance.
+        2. Creates a wallet transaction record for the debit.
+        3. Increases the group's balance.
+        4. Creates a group transaction message for the credit.
+
+        Args:
+            group (Group): The group receiving the contribution.
+            wallet (Wallet): The user's wallet.
+            user_id (uuid.UUID): The ID of the contributing user.
+            amount (Decimal): The amount to contribute.
+        """
+        try:
+            wallet.total_balance -= amount
+            self.session.add(wallet)
+
+            wallet_transaction = Transaction(
+                wallet_id=wallet.id,
+                owner_id=user_id,
+                amount=-amount,
+                type=TransactionType.GROUP_SAVINGS_DEPOSIT,
+                description=f"Contribution to group: {group.name}",
+                status=TransactionStatus.COMPLETED,
+            )
+            self.session.add(wallet_transaction)
+
+            group.current_balance += amount
+            self.session.add(group)
+
+            group_message = GroupTransactionMessage(
+                group_id=group.id,
+                user_id=user_id,
+                amount=amount,
+                type=TransactionType.GROUP_SAVINGS_DEPOSIT,
+            )
+            self.session.add(group_message)
+
+            await self.session.commit()
+
+        except Exception:
+            await self.session.rollback()
+            raise
+
+    async def create_withdrawal(
+        self, group: Group, wallet: Wallet, user_id: uuid.UUID, amount: Decimal
+    ) -> None:
+        """
+        Atomically handles a user's withdrawal from a group.
+
+        1. Decreases the group's balance.
+        2. Creates a group transaction message for the withdrawal.
+        3. Increases the user's wallet balance.
+        4. Creates a wallet transaction record for the credit.
+
+        Args:
+            group (Group): The group to withdraw from.
+            wallet (Wallet): The user's wallet.
+            user_id (uuid.UUID): The ID of the withdrawing user.
+            amount (Decimal): The amount to withdraw.
+        """
+        try:
+            group.current_balance -= amount
+            self.session.add(group)
+
+            group_message = GroupTransactionMessage(
+                group_id=group.id,
+                user_id=user_id,
+                amount=amount,
+                type=TransactionType.GROUP_SAVINGS_WITHDRAWAL,
+            )
+            self.session.add(group_message)
+
+            wallet.total_balance += amount
+            self.session.add(wallet)
+
+            wallet_transaction = Transaction(
+                wallet_id=wallet.id,
+                owner_id=user_id,
+                amount=amount,
+                type=TransactionType.GROUP_SAVINGS_WITHDRAWAL,
+                description=f"Withdrawal from group: {group.name}",
+                status=TransactionStatus.COMPLETED,
+            )
+            self.session.add(wallet_transaction)
+
+            await self.session.commit()
+
+        except Exception:
+            await self.session.rollback()
+            raise
+
     async def create_group_transaction_message(
         self, group_id: uuid.UUID, user_id: uuid.UUID, amount: float, transaction_type: TransactionType
     ) -> GroupTransactionMessage:
@@ -184,7 +282,7 @@ class GroupRepository:
 
         group = await self.get_group_by_id(group_id)
         if group:
-            group.current_balance += amount
+            group.current_balance += Decimal(str(amount))
             self.session.add(group)
 
         await self.session.commit()
