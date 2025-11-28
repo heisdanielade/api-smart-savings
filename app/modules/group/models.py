@@ -1,3 +1,5 @@
+# app/modules/group/models.py
+
 import uuid
 from datetime import datetime
 from typing import Optional, List, TYPE_CHECKING
@@ -19,19 +21,17 @@ class Group(GroupBase, table=True):
     __tablename__ = "groups"
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    admin_id: uuid.UUID = Field(foreign_key="app_user.id", nullable=False)
-    created_at: datetime = Field(sa_column=Column(DateTime(timezone=True), server_default=func.now()))
-    updated_at: Optional[datetime] = Field(
-        sa_column=Column(
-            DateTime(timezone=True),
-            server_default=func.now(),
-            onupdate=func.now(),
-        )
-    )
+    admin_id: uuid.UUID = Field(foreign_key="app_user.id")
+    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    updated_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
 
     admin: "User" = Relationship(back_populates="groups_admin")
-    members: List["GroupMember"] = Relationship(back_populates="group")
-    messages: List["GroupTransactionMessage"] = Relationship(back_populates="group")
+    members: List["GroupMember"] = Relationship(
+        back_populates="group", sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
+    transaction_messages: List["GroupTransactionMessage"] = Relationship(
+        back_populates="group", sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
 
 
 class GroupMemberBase(SQLModel):
@@ -67,7 +67,7 @@ class GroupTransactionMessage(GroupTransactionMessageBase, table=True):
     user_id: uuid.UUID = Field(foreign_key="app_user.id", nullable=False)
     timestamp: datetime = Field(sa_column=Column(DateTime(timezone=True), server_default=func.now()))
 
-    group: "Group" = Relationship(back_populates="messages")
+    group: "Group" = Relationship(back_populates="transaction_messages")
     user: "User" = Relationship()
 
 

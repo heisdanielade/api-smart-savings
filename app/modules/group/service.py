@@ -3,6 +3,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session
@@ -59,12 +60,11 @@ async def get_group(
     """
     Get detailed information about a specific group. Only members can view group details.
     """
-    group = await repo.get_group_by_id(group_id)
+    group = await repo.get_group_details_by_id(group_id)
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
 
-    members = await repo.get_group_members(group_id)
-    is_member = any(member.user_id == current_user.id for member in members)
+    is_member = any(str(member.user_id) == str(current_user.id) for member in group.members)
     if not is_member:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a member of this group")
 
@@ -84,12 +84,12 @@ async def update_group_settings(
     group = await repo.get_group_by_id(group_id)
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
-    if group.admin_id != current_user.id:
+    if str(group.admin_id) != str(current_user.id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admin can update the group")
     return await repo.update_group(group_id, group_in)
 
 
-@router.delete("/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{group_id}", status_code=status.HTTP_200_OK)
 async def delete_group(
     group_id: uuid.UUID,
     repo: GroupRepository = Depends(get_group_repo),
@@ -101,9 +101,19 @@ async def delete_group(
     group = await repo.get_group_by_id(group_id)
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
-    if group.admin_id != current_user.id:
+    if str(group.admin_id) != str(current_user.id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admin can delete the group")
-    await repo.delete_group(group_id)
+
+    deleted = await repo.delete_group(group_id)
+    if deleted:
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={"message": "Group deleted successfully"},
+        )
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND, detail="Group not found or could not be deleted"
+    )
 
 
 # Member Management Endpoints
@@ -120,7 +130,7 @@ async def add_group_member(
     group = await repo.get_group_by_id(group_id)
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
-    if group.admin_id != current_user.id:
+    if str(group.admin_id) != str(current_user.id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admin can add members")
 
     members = await repo.get_group_members(group_id)
@@ -139,12 +149,12 @@ async def remove_group_member(
 ):
     """
     Remove a member from a group. Only the group admin can perform this action.
-    The admin cannot remove themselves.
+    The admin cannot be removed.
     """
     group = await repo.get_group_by_id(group_id)
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
-    if group.admin_id != current_user.id:
+    if str(group.admin_id) != str(current_user.id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admin can remove members")
 
     if member_in.user_id == group.admin_id:

@@ -29,7 +29,7 @@ class GroupRepository:
         """
         new_group = Group(**group_data.dict(), admin_id=admin_id)
         self.session.add(new_group)
-        await self.session.flush()  # Flush to get the new_group.id
+        await self.session.flush()
 
         admin_member = GroupMember(group_id=new_group.id, user_id=admin_id, role=GroupRole.ADMIN)
         self.session.add(admin_member)
@@ -39,6 +39,21 @@ class GroupRepository:
         return new_group
 
     async def get_group_by_id(self, group_id: uuid.UUID) -> Optional[Group]:
+        """
+        Retrieves a group by its ID.
+
+        Args:
+            group_id (uuid.UUID): The ID of the group to retrieve.
+
+        Returns:
+            Optional[Group]: The group object if found, otherwise None.
+        """
+        result = await self.session.execute(
+            select(Group).where(Group.id == group_id)
+        )
+        return result.scalars().first()
+
+    async def get_group_details_by_id(self, group_id: uuid.UUID) -> Optional[Group]:
         """
         Retrieves a group by its ID, eagerly loading members and messages.
 
@@ -51,7 +66,9 @@ class GroupRepository:
         result = await self.session.execute(
             select(Group)
             .where(Group.id == group_id)
-            .options(selectinload(Group.members), selectinload(Group.messages))
+            .options(
+                selectinload(Group.members), selectinload(Group.transaction_messages)
+            )
         )
         return result.scalars().first()
 
