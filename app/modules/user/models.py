@@ -59,6 +59,10 @@ class User(UserBase, table=True):
     wallet: "Wallet" = Relationship(back_populates="user", sa_relationship_kwargs={"uselist": False})
     transactions: list["Transaction"] = Relationship(back_populates="owner", cascade_delete=False)
 
+    # Group relationships
+    groups_admin: list["Group"] = Relationship(back_populates="admin")
+    group_memberships: list["GroupMember"] = Relationship(back_populates="user")
+
     def __setattr__(self, name, value) -> None:
         """
         Prevent update for the ` created_at ` field.
@@ -78,3 +82,4 @@ from app.modules.wallet.models import Wallet
 from app.modules.wallet.models import Transaction
 
 User.model_rebuild()
+

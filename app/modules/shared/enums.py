@@ -14,6 +14,7 @@ class Currency(str, Enum):
 
 class TransactionType(str, Enum):
     """Enumeration of transaction types."""
+
     WALLET_DEPOSIT = "WALLET_DEPOSIT"
     WALLET_WITHDRAWAL = "WALLET_WITHDRAWAL"
     GROUP_SAVINGS_DEPOSIT = "GROUP_SAVINGS_DEPOSIT"
@@ -21,11 +22,21 @@ class TransactionType(str, Enum):
     INDIVIDUAL_SAVINGS_DEPOSIT = "INDIVIDUAL_SAVINGS_DEPOSIT"
     INDIVIDUAL_SAVINGS_WITHDRAWAL = "INDIVIDUAL_SAVINGS_WITHDRAWAL"
 
+
+class GroupRole(str, Enum):
+    """Enumeration of group member roles."""
+
+    ADMIN = "ADMIN"
+    MEMBER = "MEMBER"
+
+
 class TransactionStatus(str, Enum):
     """Enumeration of transaction statuses."""
+
     PENDING = "PENDING"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
+
 
 class Role(str, Enum):
     """Enumeration of user roles."""
