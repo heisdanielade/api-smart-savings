@@ -14,7 +14,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.config import settings
 from app.core.security.hashing import hash_ip
-from app.core.utils.helpers import set_latest_response_latency
 
 
 # Detect environment
@@ -131,6 +130,9 @@ def get_request_log_message(status_code: int) -> str:
 # ---------------------------
 class LoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
+        # Import here to avoid circular dependency
+        from app.main import metrics
+        
         ip = request.client.host
         masked_ip = hash_ip(ip)
         start_time = time.time()
@@ -142,7 +144,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             from slowapi.errors import RateLimitExceeded
 
             process_time = (time.time() - start_time) * 1000
-            set_latest_response_latency(process_time)
+            metrics.set_latest_response_latency(process_time)
 
             if isinstance(exc, RateLimitExceeded):
                 status_code = 429
@@ -162,7 +164,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
 
         # Normal requests
         process_time = (time.time() - start_time) * 1000
-        set_latest_response_latency(process_time)
+        metrics.set_latest_response_latency(process_time)
         
         message = get_request_log_message(response.status_code)
         logger.info(

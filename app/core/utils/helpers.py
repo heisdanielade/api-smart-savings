@@ -11,10 +11,6 @@ import psutil
 from sqlmodel import select
 
 
-# Global variable to track the latest request latency
-latest_request_latency: float = 0.0
-
-
 def generate_secure_code(length=6):
     return "".join(secrets.choice(string.digits) for _ in range(length))
 
@@ -88,20 +84,6 @@ def get_uptime(start_time: datetime) -> str:
     minutes, seconds = divmod(seconds, 60)
     
     return f"{days}d {int(hours)}h {int(minutes)}m {int(seconds)}s"
-
-def set_latest_response_latency(latency: float) -> None:
-    """
-    Set the latest response latency value (in milliseconds).
-    This is called by the logging middleware after each request.
-    """
-    global latest_request_latency
-    latest_request_latency = latency
-
-def get_latest_response_latency() -> float:
-    """
-    Return the latest response latency in milliseconds.
-    """
-    return latest_request_latency
 
 def get_system_metrics() -> dict:
     """

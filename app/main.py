@@ -16,7 +16,7 @@ from app.core.config import settings
 from app.core.middleware.logging import LoggingMiddleware
 from app.core.utils import error_handlers
 from app.core.utils.response import standard_response
-from app.core.utils.helpers import get_uptime, get_latest_response_latency, get_system_metrics, get_db_status
+from app.core.utils.helpers import get_uptime, get_system_metrics, get_db_status
 
 
 app_name = settings.APP_NAME
@@ -24,6 +24,19 @@ app_version = settings.APP_VERSION
 
 main_app = application
 
+class Metrics:
+    
+    def __init__(self):
+        self.startup_time: datetime = datetime.now()
+        self.uptime: str = ''
+        self.system_metrics: dict = {}
+        self.db_status: bool = False
+        self.latest_response_latency: float = 0.0
+
+    def set_latest_response_latency(self, latency: float):
+        self.latest_response_latency = latency
+
+metrics = Metrics()
 # =======================================
 # MIDDLEWARE
 # =======================================
@@ -98,14 +111,17 @@ async def health_check():
     """
     Health check endpoint.
     """
+    metrics.uptime = get_uptime(metrics.startup_time)
+    metrics.system_metrics = get_system_metrics()
+    metrics.db_status = await get_db_status()
     return standard_response(
         status="success",
         message="API health status",
         data= {
-            "uptime": 'get_uptime(startup_time)',
+            "uptime": metrics.uptime,
             "hostname": settings.DB_HOST,
-            "db_status": "running" if await get_db_status() else "down",
-            "system_metrics": get_system_metrics(),
-            "last_request_latency_ms": get_latest_response_latency(),
+            "db_status": "running" if metrics.db_status else "down",
+            "system_metrics": metrics.system_metrics,
+            "last_request_latency_ms": metrics.latest_response_latency,
         }
     )
