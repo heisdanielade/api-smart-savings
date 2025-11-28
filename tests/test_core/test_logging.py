@@ -104,9 +104,13 @@ class TestLoggingMiddleware:
         async def mock_call_next(req):
             return mock_response
 
-        with patch("app.core.middleware.logging.logger") as mock_logger, patch(
-            "app.core.middleware.logging.hash_ip", return_value="cefd8b4a2e549a7476a56e92387"
-        ):
+        # Mock metrics to avoid importing app.main which triggers database initialization
+        mock_metrics = Mock()
+        mock_metrics.set_latest_response_latency = Mock()
+
+        with patch("app.core.middleware.logging.logger") as mock_logger, \
+             patch("app.core.middleware.logging.hash_ip", return_value="cefd8b4a2e549a7476a56e92387"), \
+             patch("app.main.metrics", mock_metrics):
             mw = LoggingMiddleware(app=None)
             response = await mw.dispatch(mock_request, mock_call_next)
 
@@ -131,9 +135,13 @@ class TestLoggingMiddleware:
         async def mock_call_next(req):
             raise RateLimitExceeded(dummy_limit)
 
-        with patch("app.core.middleware.logging.logger") as mock_logger, patch(
-            "app.core.middleware.logging.hash_ip", return_value="cefd8b4a2e549a7476a56e92387"
-        ):
+        # Mock metrics to avoid importing app.main which triggers database initialization
+        mock_metrics = Mock()
+        mock_metrics.set_latest_response_latency = Mock()
+
+        with patch("app.core.middleware.logging.logger") as mock_logger, \
+             patch("app.core.middleware.logging.hash_ip", return_value="cefd8b4a2e549a7476a56e92387"), \
+             patch("app.main.metrics", mock_metrics):
             mw = LoggingMiddleware(app=None)
 
             with pytest.raises(RateLimitExceeded):
