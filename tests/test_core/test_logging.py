@@ -2,6 +2,7 @@ import asyncio
 import datetime
 import json
 import logging
+import sys
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -104,23 +105,25 @@ class TestLoggingMiddleware:
         async def mock_call_next(req):
             return mock_response
 
-        # Mock metrics to avoid importing app.main which triggers database initialization
+        # Mock app.main module before it gets imported
+        mock_main = Mock()
         mock_metrics = Mock()
         mock_metrics.set_latest_response_latency = Mock()
+        mock_main.metrics = mock_metrics
+        
+        with patch.dict(sys.modules, {"app.main": mock_main}):
+            with patch("app.core.middleware.logging.logger") as mock_logger, \
+                 patch("app.core.middleware.logging.hash_ip", return_value="cefd8b4a2e549a7476a56e92387"):
+                mw = LoggingMiddleware(app=None)
+                response = await mw.dispatch(mock_request, mock_call_next)
 
-        with patch("app.core.middleware.logging.logger") as mock_logger, \
-             patch("app.core.middleware.logging.hash_ip", return_value="cefd8b4a2e549a7476a56e92387"), \
-             patch("app.main.metrics", mock_metrics):
-            mw = LoggingMiddleware(app=None)
-            response = await mw.dispatch(mock_request, mock_call_next)
-
-            assert response == mock_response
-            mock_logger.info.assert_called_once()
-            call_args = mock_logger.info.call_args
-            assert call_args[1]["extra"]["status_code"] == 200
-            assert (
-                call_args[1]["extra"]["ip_anonymized"] == "cefd8b4a2e549a7476a56e92387"
-            )
+                assert response == mock_response
+                mock_logger.info.assert_called_once()
+                call_args = mock_logger.info.call_args
+                assert call_args[1]["extra"]["status_code"] == 200
+                assert (
+                    call_args[1]["extra"]["ip_anonymized"] == "cefd8b4a2e549a7476a56e92387"
+                )
 
     @pytest.mark.asyncio
     async def test_middleware_logs_rate_limited_request(self):
@@ -135,24 +138,26 @@ class TestLoggingMiddleware:
         async def mock_call_next(req):
             raise RateLimitExceeded(dummy_limit)
 
-        # Mock metrics to avoid importing app.main which triggers database initialization
+        # Mock app.main module before it gets imported
+        mock_main = Mock()
         mock_metrics = Mock()
         mock_metrics.set_latest_response_latency = Mock()
+        mock_main.metrics = mock_metrics
+        
+        with patch.dict(sys.modules, {"app.main": mock_main}):
+            with patch("app.core.middleware.logging.logger") as mock_logger, \
+                 patch("app.core.middleware.logging.hash_ip", return_value="cefd8b4a2e549a7476a56e92387"):
+                mw = LoggingMiddleware(app=None)
 
-        with patch("app.core.middleware.logging.logger") as mock_logger, \
-             patch("app.core.middleware.logging.hash_ip", return_value="cefd8b4a2e549a7476a56e92387"), \
-             patch("app.main.metrics", mock_metrics):
-            mw = LoggingMiddleware(app=None)
+                with pytest.raises(RateLimitExceeded):
+                    await mw.dispatch(mock_request, mock_call_next)
 
-            with pytest.raises(RateLimitExceeded):
-                await mw.dispatch(mock_request, mock_call_next)
-
-            mock_logger.warning.assert_called_once()
-            call_args = mock_logger.warning.call_args
-            assert call_args[1]["extra"]["status_code"] == 429
-            assert (
-                call_args[1]["extra"]["ip_anonymized"] == "cefd8b4a2e549a7476a56e92387"
-            )
+                mock_logger.warning.assert_called_once()
+                call_args = mock_logger.warning.call_args
+                assert call_args[1]["extra"]["status_code"] == 429
+                assert (
+                    call_args[1]["extra"]["ip_anonymized"] == "cefd8b4a2e549a7476a56e92387"
+                )
 
 
 # ---------------------------
