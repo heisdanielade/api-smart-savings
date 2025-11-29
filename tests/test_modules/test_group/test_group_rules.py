@@ -25,6 +25,7 @@ def mock_group_repo():
     repo.add_member_to_group = AsyncMock()
     repo.remove_member_from_group = AsyncMock()
     repo.create_contribution = AsyncMock()
+    repo.is_user_admin = AsyncMock()
     return repo
 
 @pytest.fixture
@@ -61,10 +62,10 @@ def background_tasks():
 @pytest.mark.asyncio
 async def test_add_group_member_max_limit(group_service, mock_group_repo, current_user, background_tasks):
     group_id = uuid.uuid4()
-    admin_id = current_user.id
     
     # Mock group
-    mock_group_repo.get_group_by_id.return_value = Group(id=group_id, admin_id=admin_id, name="Test Group", target_balance=1000)
+    mock_group_repo.get_group_by_id.return_value = Group(id=group_id, name="Test Group", target_balance=1000)
+    mock_group_repo.is_user_admin.return_value = True
     
     # Mock 7 existing members
     mock_group_repo.get_group_members.return_value = [
@@ -82,11 +83,11 @@ async def test_add_group_member_max_limit(group_service, mock_group_repo, curren
 @pytest.mark.asyncio
 async def test_add_group_member_cooldown(group_service, mock_group_repo, current_user, mock_settings, background_tasks):
     group_id = uuid.uuid4()
-    admin_id = current_user.id
     user_id_to_add = uuid.uuid4()
     
     # Mock group
-    mock_group_repo.get_group_by_id.return_value = Group(id=group_id, admin_id=admin_id, name="Test Group", target_balance=1000)
+    mock_group_repo.get_group_by_id.return_value = Group(id=group_id, name="Test Group", target_balance=1000)
+    mock_group_repo.is_user_admin.return_value = True
     
     # Mock existing members (less than 7)
     mock_group_repo.get_group_members.return_value = []
@@ -109,11 +110,11 @@ async def test_add_group_member_cooldown(group_service, mock_group_repo, current
 @pytest.mark.asyncio
 async def test_remove_group_member_with_contributions(group_service, mock_group_repo, mock_user_repo, current_user, background_tasks):
     group_id = uuid.uuid4()
-    admin_id = current_user.id
     user_id_to_remove = uuid.uuid4()
     
     # Mock group
-    mock_group_repo.get_group_by_id.return_value = Group(id=group_id, admin_id=admin_id, name="Test Group", target_balance=1000)
+    mock_group_repo.get_group_by_id.return_value = Group(id=group_id, name="Test Group", target_balance=1000)
+    mock_group_repo.is_user_admin.return_value = True
     
     # Mock member with contributions
     member = GroupMember(group_id=group_id, user_id=user_id_to_remove, contributed_amount=50.0)
@@ -135,7 +136,7 @@ async def test_contribute_to_group_min_members(group_service, mock_group_repo, m
     group_id = uuid.uuid4()
     
     # Mock group
-    mock_group_repo.get_group_by_id.return_value = Group(id=group_id, admin_id=uuid.uuid4(), name="Test Group", target_balance=1000)
+    mock_group_repo.get_group_by_id.return_value = Group(id=group_id, name="Test Group", target_balance=1000)
     
     # Mock only 1 member (the current user)
     mock_group_repo.get_group_members.return_value = [

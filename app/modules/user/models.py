@@ -60,7 +60,6 @@ class User(UserBase, table=True):
     transactions: list["Transaction"] = Relationship(back_populates="owner", cascade_delete=False)
 
     # Group relationships
-    groups_admin: list["Group"] = Relationship(back_populates="admin")
     group_memberships: list["GroupMember"] = Relationship(back_populates="user")
 
     def __setattr__(self, name, value) -> None:

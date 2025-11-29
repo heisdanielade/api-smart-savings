@@ -59,7 +59,7 @@ class GroupService:
         group = await self.group_repo.get_group_by_id(group_id)
         if not group:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
-        if str(group.admin_id) != str(current_user.id):
+        if not await self.group_repo.is_user_admin(group_id, current_user.id):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admin can update the group")
         return await self.group_repo.update_group(group_id, group_in)
 
@@ -70,7 +70,7 @@ class GroupService:
         group = await self.group_repo.get_group_by_id(group_id)
         if not group:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
-        if str(group.admin_id) != str(current_user.id):
+        if not await self.group_repo.is_user_admin(group_id, current_user.id):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admin can delete the group")
 
         deleted = await self.group_repo.delete_group(group_id)
@@ -97,7 +97,7 @@ class GroupService:
         group = await self.group_repo.get_group_by_id(group_id)
         if not group:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
-        if str(group.admin_id) != str(current_user.id):
+        if not await self.group_repo.is_user_admin(group_id, current_user.id):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admin can add members")
 
         members = await self.group_repo.get_group_members(group_id)
@@ -157,11 +157,14 @@ class GroupService:
         group = await self.group_repo.get_group_by_id(group_id)
         if not group:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
-        if str(group.admin_id) != str(current_user.id):
+        if not await self.group_repo.is_user_admin(group_id, current_user.id):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admin can remove members")
 
-        if member_in.user_id == group.admin_id:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Admin cannot be removed")
+        # Check if removing member is an admin
+        members = await self.group_repo.get_group_members(group_id)
+        member_to_check = next((m for m in members if m.user_id == member_in.user_id), None)
+        if member_to_check and member_to_check.role == GroupRole.ADMIN:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot remove an admin member")
 
         # Check if member has contributions
         members = await self.group_repo.get_group_members(group_id)
@@ -258,10 +261,10 @@ class GroupService:
         updated_members = await self.group_repo.get_group_members(group_id)
         current_member = next((m for m in updated_members if str(m.user_id) == str(current_user.id)), None)
 
-        # Send email notifications
-        admin = await self.user_repo.get_by_id(updated_group.admin_id)
+        # Send email notifications to all admins
+        admin_members = [m for m in updated_members if m.role == GroupRole.ADMIN]
         
-        if admin:
+        if admin_members:
             currency = current_user.preferred_currency
             
             contributor_context = {
@@ -284,15 +287,18 @@ class GroupService:
                 context=contributor_context,
             )
             
-            # Send to admin (if different from contributor)
-            if str(admin.id) != str(current_user.id):
-                await self.notification_manager.schedule(
-                    self.notification_manager.send,
-                    background_tasks=background_tasks,
-                    notification_type=NotificationType.GROUP_CONTRIBUTION_NOTIFICATION,
-                    recipients=[admin.email],
-                    context=contributor_context,
-                )
+            # Send to all admins (excluding contributor if they're also an admin)
+            for admin_member in admin_members:
+                if str(admin_member.user_id) != str(current_user.id):
+                    admin_user = await self.user_repo.get_by_id(admin_member.user_id)
+                    if admin_user:
+                        await self.notification_manager.schedule(
+                            self.notification_manager.send,
+                            background_tasks=background_tasks,
+                            notification_type=NotificationType.GROUP_CONTRIBUTION_NOTIFICATION,
+                            recipients=[admin_user.email],
+                            context=contributor_context,
+                        )
             
             # Check for milestone achievements
             if updated_group.target_balance > 0:

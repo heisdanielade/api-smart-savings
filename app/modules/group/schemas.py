@@ -40,7 +40,6 @@ class GroupRead(GroupBase):
     """Schema for reading group data, including database-generated fields."""
 
     id: uuid.UUID
-    admin_id: uuid.UUID
     current_balance: float
     created_at: datetime
     updated_at: datetime

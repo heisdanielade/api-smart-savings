@@ -21,15 +21,12 @@ class Group(GroupBase, table=True):
     __tablename__ = "groups"
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    admin_id: uuid.UUID = Field(foreign_key="app_user.id")
     created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     )
     updated_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
     )
-
-    admin: "User" = Relationship(back_populates="groups_admin")
     members: List["GroupMember"] = Relationship(
         back_populates="group", sa_relationship_kwargs={"cascade": "all, delete-orphan"}
     )

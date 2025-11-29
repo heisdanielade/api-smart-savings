@@ -29,7 +29,7 @@ class GroupRepository:
         Returns:
             Group: The newly created group object.
         """
-        new_group = Group(**group_data.dict(), admin_id=admin_id)
+        new_group = Group(**group_data.dict())
         self.session.add(new_group)
         await self.session.flush()
 
@@ -39,6 +39,26 @@ class GroupRepository:
         await self.session.commit()
         await self.session.refresh(new_group)
         return new_group
+
+    async def is_user_admin(self, group_id: uuid.UUID, user_id: uuid.UUID) -> bool:
+        """
+        Check if a user is an admin of the group.
+
+        Args:
+            group_id (uuid.UUID): The ID of the group.
+            user_id (uuid.UUID): The ID of the user.
+
+        Returns:
+            bool: True if the user is an admin, False otherwise.
+        """
+        result = await self.session.execute(
+            select(GroupMember).where(
+                GroupMember.group_id == group_id,
+                GroupMember.user_id == user_id,
+                GroupMember.role == GroupRole.ADMIN
+            )
+        )
+        return result.scalar_one_or_none() is not None
 
     async def get_group_by_id(self, group_id: uuid.UUID) -> Optional[Group]:
         """
