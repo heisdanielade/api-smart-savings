@@ -13,7 +13,7 @@ from sqlalchemy.orm import selectinload
 from app.api.dependencies import get_session, get_current_user
 from app.core.config import settings
 from app.core.middleware.logging import logger
-from app.core.utils.helpers import transform_time
+from app.modules.shared.helpers import transform_time
 from app.modules.group.models import GroupMember
 from app.modules.group.repository import GroupRepository
 from app.modules.group.schemas import (
