@@ -55,10 +55,10 @@ class GroupMemberBase(BaseModel):
     role: GroupRole = Field(default=GroupRole.MEMBER, description="The role of the member in the group")
 
 
-class GroupMemberCreate(GroupMemberBase):
+class GroupMemberCreate(BaseModel):
     """Schema for adding a new member to a group."""
 
-    pass
+    user_id: uuid.UUID = Field(..., description="The ID of the user to add to the group")
 
 
 class GroupMemberRead(GroupMemberBase):
@@ -80,10 +80,10 @@ class GroupTransactionMessageBase(BaseModel):
     type: TransactionType = Field(..., description="The type of transaction (deposit or withdrawal)")
 
 
-class GroupTransactionMessageCreate(GroupTransactionMessageBase):
+class GroupTransactionMessageCreate(BaseModel):
     """Schema for creating a new group transaction message."""
 
-    pass
+    amount: PositiveFloat = Field(..., description="The amount of the transaction")
 
 
 class GroupTransactionMessageRead(GroupTransactionMessageBase):
