@@ -99,7 +99,7 @@ class SMTPProvider(EmailProvider):
                 recipients=recipients,
                 body=html_content,
                 subtype=MessageType.html,
-                attachments=attachments
+                attachments=attachments or []
             )
 
             await self.fastmail.send_message(message)
