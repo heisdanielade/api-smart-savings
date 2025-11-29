@@ -2,6 +2,7 @@
 
 from typing import Optional, Any, Coroutine, List
 from uuid import UUID
+from decimal import Decimal
 
 from sqlalchemy.future import select
 from sqlalchemy import func
@@ -39,13 +40,13 @@ class WalletRepository:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def update_locked_amount(self, wallet_id: UUID, amount_delta: float) -> None:
+    async def update_locked_amount(self, wallet_id: UUID, amount_delta: Decimal) -> None:
         """
         Update wallet's locked amount by a delta.
         
         Args:
             wallet_id (UUID): The wallet ID.
-            amount_delta (float): The amount to add (positive) or subtract (negative).
+            amount_delta (Decimal): The amount to add (positive) or subtract (negative).
         """
         from sqlalchemy import update
         

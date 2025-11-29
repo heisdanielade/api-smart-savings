@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 from app.core.config import settings
 from app.core.middleware.logging import logger
 from app.modules.shared.helpers import transform_time
+from app.modules.shared.enums import GroupRole, NotificationType, TransactionType, TransactionStatus
 from app.modules.group.models import GroupMember
 from app.modules.group.schemas import (
     GroupCreate,
@@ -19,7 +20,7 @@ from app.modules.group.schemas import (
     GroupTransactionMessageCreate,
     GroupUpdate,
 )
-from app.modules.shared.enums import GroupRole, NotificationType
+
 from app.modules.user.models import User
 
 
@@ -253,7 +254,7 @@ class GroupService:
         # Orchestrate atomic operations with transaction handling
         try:
             # 1. Lock funds in wallet
-            await self.wallet_repo.update_locked_amount(wallet.id, float(amount_to_contribute))
+            await self.wallet_repo.update_locked_amount(wallet.id, amount_to_contribute)
             
             # 2. Create wallet transaction record
             from app.modules.wallet.models import Transaction
@@ -460,7 +461,7 @@ class GroupService:
         # Orchestrate atomic operations with transaction handling
         try:
             # 1. Unlock funds in wallet
-            await self.wallet_repo.update_locked_amount(wallet.id, -float(amount_to_withdraw))
+            await self.wallet_repo.update_locked_amount(wallet.id, -amount_to_withdraw)
             
             # 2. Create wallet transaction record
             from app.modules.wallet.models import Transaction
