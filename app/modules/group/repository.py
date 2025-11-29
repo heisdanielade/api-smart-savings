@@ -87,7 +87,8 @@ class GroupRepository:
         """
         group = await self.get_group_by_id(group_id)
         if group:
-            for key, value in group_update.dict(exclude_unset=True).items():
+            update_data = group_update.dict(exclude_unset=True, exclude_none=True)
+            for key, value in update_data.items():
                 setattr(group, key, value)
             await self.session.commit()
             await self.session.refresh(group)
