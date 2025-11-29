@@ -4,12 +4,17 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload
 
 from app.api.dependencies import get_session, get_current_user
 from app.core.config import settings
+from app.core.middleware.logging import logger
+from app.core.utils.helpers import transform_time
+from app.modules.group.models import GroupMember
 from app.modules.group.repository import GroupRepository
 from app.modules.group.schemas import (
     GroupCreate,
@@ -20,12 +25,22 @@ from app.modules.group.schemas import (
     GroupTransactionMessageRead,
     GroupUpdate,
 )
-from app.modules.shared.enums import GroupRole
+from app.modules.shared.enums import GroupRole, NotificationType
 from app.modules.user.models import User
+from app.modules.user.repository import UserRepository
 from app.modules.wallet.repository import WalletRepository, TransactionRepository
 
 
 router = APIRouter()
+
+
+class GroupService:
+    """Service for handling group operations and notifications."""
+    
+    def __init__(self, group_repo, user_repo, notification_manager):
+        self.group_repo = group_repo
+        self.user_repo = user_repo
+        self.notification_manager = notification_manager
 
 
 def get_group_repo(session: AsyncSession = Depends(get_session)) -> GroupRepository:
@@ -140,12 +155,16 @@ async def delete_group(
 async def add_group_member(
     group_id: uuid.UUID,
     member_in: GroupMemberCreate,
+    background_tasks: BackgroundTasks = None,
+    session: AsyncSession = Depends(get_session),
     repo: GroupRepository = Depends(get_group_repo),
     current_user: User = Depends(get_current_user),
 ):
     """
     Add a member to a group. Only the group admin can perform this action.
     """
+    from app.modules.notifications.email.service import EmailNotificationService
+    
     group = await repo.get_group_by_id(group_id)
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
@@ -170,6 +189,29 @@ async def add_group_member(
             )
 
     await repo.add_member_to_group(group_id, member_in.user_id)
+    
+    # Send email notification to new member
+    user_repo = UserRepository(session)
+    new_member = await user_repo.get_by_id(member_in.user_id)
+    if new_member:
+        notification_manager = EmailNotificationService()
+        currency = new_member.preferred_currency
+        
+        await notification_manager.schedule(
+            notification_manager.send,
+            background_tasks=background_tasks,
+            notification_type=NotificationType.GROUP_MEMBER_ADDED_NOTIFICATION,
+            recipients=[new_member.email],
+            context={
+                "member_name": new_member.full_name or new_member.email,
+                "group_name": group.name,
+                "group_admin_name": current_user.full_name or current_user.email,
+                "group_current_balance": f"{float(group.current_balance):,.2f}".rstrip('0').rstrip('.'),
+                "group_target_balance": f"{float(group.target_balance):,.2f}".rstrip('0').rstrip('.'),
+                "currency": currency,
+            },
+        )
+    
     return JSONResponse(
         status_code=status.HTTP_201_CREATED,
         content={"message": "Member added successfully"},
@@ -180,6 +222,8 @@ async def add_group_member(
 async def remove_group_member(
     group_id: uuid.UUID,
     member_in: GroupMemberCreate,
+    background_tasks: BackgroundTasks = None,
+    session: AsyncSession = Depends(get_session),
     repo: GroupRepository = Depends(get_group_repo),
     current_user: User = Depends(get_current_user),
 ):
@@ -187,6 +231,8 @@ async def remove_group_member(
     Remove a member from a group. Only the group admin can perform this action.
     The admin cannot remove themselves.
     """
+    from app.modules.notifications.email.service import EmailNotificationService
+    
     group = await repo.get_group_by_id(group_id)
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
@@ -205,8 +251,34 @@ async def remove_group_member(
             detail="Member cannot be removed while they have active contributions. Please withdraw funds first."
         )
 
+    # Get removed member user object before removal
+    user_repo = UserRepository(session)
+    removed_member_user = await user_repo.get_by_id(member_in.user_id)
+    
     removed = await repo.remove_member_from_group(group_id, member_in.user_id)
     if removed:
+        # Send email notification to removed member
+        if removed_member_user:
+            notification_manager = EmailNotificationService()
+            currency = removed_member_user.preferred_currency
+            cooldown_days = settings.REMOVE_MEMBER_COOLDOWN_DAYS
+            
+            await notification_manager.schedule(
+                notification_manager.send,
+                background_tasks=background_tasks,
+                notification_type=NotificationType.GROUP_MEMBER_REMOVED_NOTIFICATION,
+                recipients=[removed_member_user.email],
+                context={
+                    "member_name": removed_member_user.full_name or removed_member_user.email,
+                    "group_name": group.name,
+                    "group_admin_name": current_user.full_name or current_user.email,
+                    "group_current_balance": f"{float(group.current_balance):,.2f}".rstrip('0').rstrip('.'),
+                    "group_target_balance": f"{float(group.target_balance):,.2f}".rstrip('0').rstrip('.'),
+                    "currency": currency,
+                    "cooldown_days": cooldown_days,
+                },
+            )
+        
         return JSONResponse(
             status_code=status.HTTP_200_OK,
             content={"message": "Member removed successfully"},
@@ -220,6 +292,8 @@ async def remove_group_member(
 async def contribute_to_group(
     group_id: uuid.UUID,
     transaction_in: GroupTransactionMessageCreate,
+    background_tasks: BackgroundTasks = None,
+    session: AsyncSession = Depends(get_session),
     repo: GroupRepository = Depends(get_group_repo),
     wallet_repo: WalletRepository = Depends(get_wallet_repo),
     current_user: User = Depends(get_current_user),
@@ -229,6 +303,8 @@ async def contribute_to_group(
     debit the user's wallet and credit the group, or fail without
     changing any balances.
     """
+    from app.modules.notifications.email.service import EmailNotificationService
+    
     group = await repo.get_group_by_id(group_id)
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
@@ -257,6 +333,9 @@ async def contribute_to_group(
     if wallet.available_balance < amount_to_contribute:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Insufficient funds")
 
+    # Store previous balance for milestone detection
+    previous_balance = group.current_balance
+    
     await repo.create_contribution(
         group=group,
         wallet=wallet,
@@ -267,6 +346,95 @@ async def contribute_to_group(
     updated_group = await repo.get_group_by_id(group_id)
     updated_members = await repo.get_group_members(group_id)
     current_member = next((m for m in updated_members if str(m.user_id) == str(current_user.id)), None)
+
+    # Send email notifications
+    user_repo = UserRepository(session)
+    admin = await user_repo.get_by_id(updated_group.admin_id)
+    
+    if admin:
+        notification_manager = EmailNotificationService()
+        currency = current_user.preferred_currency
+        
+        contributor_context = {
+            "contributor_name": current_user.full_name or current_user.email,
+            "group_name": updated_group.name,
+            "contribution_amount": f"{float(amount_to_contribute):,.2f}".rstrip('0').rstrip('.'),
+            "currency": currency,
+            "group_current_balance": f"{float(updated_group.current_balance):,.2f}".rstrip('0').rstrip('.'),
+            "group_target_balance": f"{float(updated_group.target_balance):,.2f}".rstrip('0').rstrip('.'),
+            "member_total_contributed": f"{float(current_member.contributed_amount):,.2f}".rstrip('0').rstrip('.') if current_member else "0",
+            "transaction_date": transform_time(datetime.now(timezone.utc)),
+        }
+        
+        # Send to contributor
+        await notification_manager.schedule(
+            notification_manager.send,
+            background_tasks=background_tasks,
+            notification_type=NotificationType.GROUP_CONTRIBUTION_NOTIFICATION,
+            recipients=[current_user.email],
+            context=contributor_context,
+        )
+        
+        # Send to admin (if different from contributor)
+        if str(admin.id) != str(current_user.id):
+            await notification_manager.schedule(
+                notification_manager.send,
+                background_tasks=background_tasks,
+                notification_type=NotificationType.GROUP_CONTRIBUTION_NOTIFICATION,
+                recipients=[admin.email],
+                context=contributor_context,
+            )
+        
+        # Check for milestone achievements
+        if updated_group.target_balance > 0:
+            current_percentage = (float(updated_group.current_balance) / float(updated_group.target_balance)) * 100
+            previous_percentage = (float(previous_balance) / float(updated_group.target_balance)) * 100
+            
+            # Load members with user relationships for milestone notifications
+            result = await session.execute(
+                select(GroupMember)
+                .where(GroupMember.group_id == group_id)
+                .options(selectinload(GroupMember.user))
+            )
+            members_with_users = result.scalars().all()
+            
+            # Check if 50% milestone was just crossed
+            if previous_percentage < 50 <= current_percentage:
+                member_emails = [m.user.email for m in members_with_users if hasattr(m, 'user') and m.user]
+                
+                if member_emails:
+                    await notification_manager.schedule(
+                        notification_manager.send,
+                        background_tasks=background_tasks,
+                        notification_type=NotificationType.GROUP_MILESTONE_50_NOTIFICATION,
+                        recipients=member_emails,
+                        context={
+                            "group_name": updated_group.name,
+                            "milestone_percentage": 50,
+                            "group_current_balance": f"{float(updated_group.current_balance):,.2f}".rstrip('0').rstrip('.'),
+                            "group_target_balance": f"{float(updated_group.target_balance):,.2f}".rstrip('0').rstrip('.'),
+                            "currency": currency,
+                        },
+                    )
+            
+            # Check if 100% milestone was just crossed
+            if previous_percentage < 100 <= current_percentage:
+                member_emails = [m.user.email for m in members_with_users if hasattr(m, 'user') and m.user]
+                
+                if member_emails:
+                    await notification_manager.schedule(
+                        notification_manager.send,
+                        background_tasks=background_tasks,
+                        notification_type=NotificationType.GROUP_MILESTONE_100_NOTIFICATION,
+                        recipients=member_emails,
+                        context={
+                            "group_name": updated_group.name,
+                            "milestone_percentage": 100,
+                            "group_current_balance": f"{float(updated_group.current_balance):,.2f}".rstrip('0').rstrip('.'),
+                            "group_target_balance": f"{float(updated_group.target_balance):,.2f}".rstrip('0').rstrip('.'),
+                            "currency": currency,
+                        },
+                    )
 
     return JSONResponse(
         status_code=status.HTTP_201_CREATED,
@@ -294,6 +462,7 @@ async def contribute_to_group(
 async def remove_contribution(
     group_id: uuid.UUID,
     transaction_in: GroupTransactionMessageCreate,
+    background_tasks: BackgroundTasks = None,
     repo: GroupRepository = Depends(get_group_repo),
     wallet_repo: WalletRepository = Depends(get_wallet_repo),
     current_user: User = Depends(get_current_user),
@@ -303,6 +472,8 @@ async def remove_contribution(
     credit the user's wallet and debit the group, or fail without
     changing any balances.
     """
+    from app.modules.notifications.email.service import EmailNotificationService
+    
     group = await repo.get_group_by_id(group_id)
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
@@ -312,7 +483,8 @@ async def remove_contribution(
     if not member:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a member of this group")
 
-    if group.require_admin_approval_for_funds_removal and member.role != GroupRole.ADMIN:
+    admin_approval_required = group.require_admin_approval_for_funds_removal and member.role != GroupRole.ADMIN
+    if admin_approval_required:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin approval required for withdrawal",
@@ -351,6 +523,28 @@ async def remove_contribution(
     updated_group = await repo.get_group_by_id(group_id)
     updated_members = await repo.get_group_members(group_id)
     current_member = next((m for m in updated_members if str(m.user_id) == str(current_user.id)), None)
+
+    # Send email notification
+    notification_manager = EmailNotificationService()
+    currency = current_user.preferred_currency
+    
+    await notification_manager.schedule(
+        notification_manager.send,
+        background_tasks=background_tasks,
+        notification_type=NotificationType.GROUP_WITHDRAWAL_NOTIFICATION,
+        recipients=[current_user.email],
+        context={
+            "member_name": current_user.full_name or current_user.email,
+            "group_name": updated_group.name,
+            "withdrawal_amount": f"{float(amount_to_withdraw):,.2f}".rstrip('0').rstrip('.'),
+            "currency": currency,
+            "group_current_balance": f"{float(updated_group.current_balance):,.2f}".rstrip('0').rstrip('.'),
+            "group_target_balance": f"{float(updated_group.target_balance):,.2f}".rstrip('0').rstrip('.'),
+            "member_total_contributed": f"{float(current_member.contributed_amount):,.2f}".rstrip('0').rstrip('.') if current_member else "0",
+            "transaction_date": transform_time(datetime.now(timezone.utc)),
+            "admin_approval_required": group.require_admin_approval_for_funds_removal,
+        },
+    )
 
     return JSONResponse(
         status_code=status.HTTP_201_CREATED,
