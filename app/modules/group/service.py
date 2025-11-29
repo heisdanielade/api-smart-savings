@@ -250,12 +250,45 @@ class GroupService:
         # Store previous balance for milestone detection
         previous_balance = group.current_balance
         
-        await self.group_repo.create_contribution(
-            group=group,
-            wallet=wallet,
-            user_id=current_user.id,
-            amount=amount_to_contribute,
-        )
+        # Orchestrate atomic operations with transaction handling
+        try:
+            # 1. Lock funds in wallet
+            await self.wallet_repo.update_locked_amount(wallet.id, float(amount_to_contribute))
+            
+            # 2. Create wallet transaction record
+            from app.modules.wallet.models import Transaction
+            from app.modules.wallet.repository import TransactionRepository
+            transaction_repo = TransactionRepository(self.wallet_repo.db)
+            wallet_transaction = Transaction(
+                wallet_id=wallet.id,
+                owner_id=current_user.id,
+                amount=-float(amount_to_contribute),
+                type=TransactionType.GROUP_SAVINGS_DEPOSIT,
+                description=f"Contribution to group: {group_id}",
+                status=TransactionStatus.COMPLETED,
+            )
+            self.wallet_repo.db.add(wallet_transaction)
+            
+            # 3. Update group balance
+            await self.group_repo.update_group_balance(group_id, amount_to_contribute)
+            
+            # 4. Update member contribution
+            await self.group_repo.update_member_contribution(group_id, current_user.id, amount_to_contribute)
+            
+            # 5. Create group transaction message
+            await self.group_repo.create_group_transaction_message(
+                group_id, 
+                current_user.id, 
+                amount_to_contribute, 
+                TransactionType.GROUP_SAVINGS_DEPOSIT
+            )
+            
+            # Commit all operations
+            await self.group_repo.session.commit()
+            
+        except Exception:
+            await self.group_repo.session.rollback()
+            raise
 
         updated_group = await self.group_repo.get_group_by_id(group_id)
         updated_members = await self.group_repo.get_group_members(group_id)
@@ -417,14 +450,49 @@ class GroupService:
                 detail="Insufficient funds in the group",
             )
 
-        try:
-            await self.group_repo.create_withdrawal(
-                group=group,
-                wallet=wallet,
-                user_id=current_user.id,
-                amount=amount_to_withdraw,
+        # Validate withdrawal amount against user's contribution
+        if member.contributed_amount < amount_to_withdraw:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot withdraw more than contributed amount ({member.contributed_amount})",
             )
-        except ValueError as e:
+
+        # Orchestrate atomic operations with transaction handling
+        try:
+            # 1. Unlock funds in wallet
+            await self.wallet_repo.update_locked_amount(wallet.id, -float(amount_to_withdraw))
+            
+            # 2. Create wallet transaction record
+            from app.modules.wallet.models import Transaction
+            wallet_transaction = Transaction(
+                wallet_id=wallet.id,
+                owner_id=current_user.id,
+                amount=float(amount_to_withdraw),
+                type=TransactionType.GROUP_SAVINGS_WITHDRAWAL,
+                description=f"Withdrawal from group: {group_id}",
+                status=TransactionStatus.COMPLETED,
+            )
+            self.wallet_repo.db.add(wallet_transaction)
+            
+            # 3. Update group balance
+            await self.group_repo.update_group_balance(group_id, -amount_to_withdraw)
+            
+            # 4. Update member contribution
+            await self.group_repo.update_member_contribution(group_id, current_user.id, -amount_to_withdraw)
+            
+            # 5. Create group transaction message
+            await self.group_repo.create_group_transaction_message(
+                group_id, 
+                current_user.id, 
+                amount_to_withdraw, 
+                TransactionType.GROUP_SAVINGS_WITHDRAWAL
+            )
+            
+            # Commit all operations
+            await self.group_repo.session.commit()
+            
+        except Exception as e:
+            await self.group_repo.session.rollback()
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=str(e),

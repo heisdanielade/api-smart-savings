@@ -206,179 +206,59 @@ class GroupRepository:
         )
         return result.scalars().first()
 
-    async def create_contribution(
-        self, group: Group, wallet: Wallet, user_id: uuid.UUID, amount: Decimal
-    ) -> None:
+    async def update_group_balance(self, group_id: uuid.UUID, amount_delta: Decimal) -> None:
         """
-        Atomically handles a user's contribution to a group.
-
-        1. Decreases the user's wallet balance.
-        2. Creates a wallet transaction record for the debit.
-        3. Increases the group's balance.
-        4. Creates a group transaction message for the credit.
-
+        Update a group's current balance by a delta amount.
+        
         Args:
-            group (Group): The group receiving the contribution.
-            wallet (Wallet): The user's wallet.
-            user_id (uuid.UUID): The ID of the contributing user.
-            amount (Decimal): The amount to contribute.
+            group_id (uuid.UUID): The ID of the group.
+            amount_delta (Decimal): The amount to add (positive) or subtract (negative).
         """
-        try:
-            group = await self.get_group_by_id(group.id)
-            if not group:
-                raise ValueError("Group not found")
+        from sqlalchemy import update
+        
+        await self.session.execute(
+            update(Group)
+            .where(Group.id == group_id)
+            .values(current_balance=Group.current_balance + amount_delta)
+        )
 
-            stmt = select(Wallet).where(Wallet.user_id == user_id)
-            result = await self.session.execute(stmt)
-            wallet = result.scalar_one_or_none()
-            if not wallet:
-                raise ValueError("Wallet not found")
-
-            wallet.locked_amount += amount
-            self.session.add(wallet)
-
-            wallet_transaction = Transaction(
-                wallet_id=wallet.id,
-                owner_id=user_id,
-                amount=-amount,
-                type=TransactionType.GROUP_SAVINGS_DEPOSIT,
-                description=f"Contribution to group: {group.id}",
-                status=TransactionStatus.COMPLETED,
-            )
-            self.session.add(wallet_transaction)
-
-            group.current_balance += amount
-            self.session.add(group)
-
-            result = await self.session.execute(
-                select(GroupMember).where(GroupMember.group_id == group.id, GroupMember.user_id == user_id)
-            )
-            member = result.scalars().first()
-            if member:
-                member.contributed_amount += amount
-                self.session.add(member)
-
-            group_message = GroupTransactionMessage(
-                group_id=group.id,
-                user_id=user_id,
-                amount=amount,
-                type=TransactionType.GROUP_SAVINGS_DEPOSIT,
-            )
-            self.session.add(group_message)
-
-            await self.session.commit()
-
-        except Exception:
-            await self.session.rollback()
-            raise
-
-    async def create_withdrawal(
-        self, group: Group, wallet: Wallet, user_id: uuid.UUID, amount: Decimal
-    ) -> None:
+    async def update_member_contribution(self, group_id: uuid.UUID, user_id: uuid.UUID, amount_delta: Decimal) -> None:
         """
-        Atomically handles a user's withdrawal from a group.
-
-        1. Decreases the group's balance.
-        2. Creates a group transaction message for the withdrawal.
-        3. Increases the user's wallet balance.
-        4. Creates a wallet transaction record for the credit.
-
+        Update a group member's contributed amount by a delta.
+        
         Args:
-            group (Group): The group to withdraw from.
-            wallet (Wallet): The user's wallet.
-            user_id (uuid.UUID): The ID of the withdrawing user.
-            amount (Decimal): The amount to withdraw.
+            group_id (uuid.UUID): The ID of the group.
+            user_id (uuid.UUID): The ID of the member.
+            amount_delta (Decimal): The amount to add (positive) or subtract (negative).
         """
-        try:
-            group = await self.get_group_by_id(group.id)
-            if not group:
-                raise ValueError("Group not found")
-
-            stmt = select(Wallet).where(Wallet.user_id == user_id)
-            result = await self.session.execute(stmt)
-            wallet = result.scalar_one_or_none()
-            if not wallet:
-                raise ValueError("Wallet not found")
-
-            result = await self.session.execute(
-                select(GroupMember).where(GroupMember.group_id == group.id, GroupMember.user_id == user_id)
-            )
-            member = result.scalars().first()
-            if not member:
-                raise ValueError("User is not a member of this group")
-            
-            if member.contributed_amount < amount:
-                raise ValueError(f"Cannot withdraw more than contributed amount ({member.contributed_amount})")
-            
-            from sqlalchemy import update
-
-            await self.session.execute(
-                update(GroupMember)
-                .where(GroupMember.id == member.id)
-                .values(contributed_amount=GroupMember.contributed_amount - amount)
-            )
-
-            await self.session.execute(
-                update(Group)
-                .where(Group.id == group.id)
-                .values(current_balance=Group.current_balance - amount)
-            )
-
-            group_message = GroupTransactionMessage(
-                group_id=group.id,
-                user_id=user_id,
-                amount=amount,
-                type=TransactionType.GROUP_SAVINGS_WITHDRAWAL,
-            )
-            self.session.add(group_message)
-
-            await self.session.execute(
-                update(Wallet)
-                .where(Wallet.id == wallet.id)
-                .values(locked_amount=Wallet.locked_amount - amount)
-            )
-
-            wallet_transaction = Transaction(
-                wallet_id=wallet.id,
-                owner_id=user_id,
-                amount=amount,
-                type=TransactionType.GROUP_SAVINGS_WITHDRAWAL,
-                description=f"Withdrawal from group: {group.id}",
-                status=TransactionStatus.COMPLETED,
-            )
-            self.session.add(wallet_transaction)
-
-            await self.session.commit()
-
-        except Exception:
-            await self.session.rollback()
-            raise
+        from sqlalchemy import update
+        
+        await self.session.execute(
+            update(GroupMember)
+            .where(GroupMember.group_id == group_id, GroupMember.user_id == user_id)
+            .values(contributed_amount=GroupMember.contributed_amount + amount_delta)
+        )
 
     async def create_group_transaction_message(
-        self, group_id: uuid.UUID, user_id: uuid.UUID, amount: float, transaction_type: TransactionType
+        self, group_id: uuid.UUID, user_id: uuid.UUID, amount: Decimal, transaction_type: TransactionType
     ) -> GroupTransactionMessage:
         """
-        Creates a new transaction message and updates the group's balance.
-
+        Create a group transaction message record.
+        
         Args:
-            group_id (uuid.UUID): The ID of the group for the transaction.
-            user_id (uuid.UUID): The ID of the user performing the transaction.
-            amount (float): The transaction amount. Can be positive (deposit) or negative (withdrawal).
-            transaction_type (TransactionType): The type of the transaction.
-
+            group_id (uuid.UUID): The ID of the group.
+            user_id (uuid.UUID): The ID of the user.
+            amount (Decimal): The transaction amount.
+            transaction_type (TransactionType): The type of transaction.
+            
         Returns:
-            GroupTransactionMessage: The newly created transaction message object.
+            GroupTransactionMessage: The created transaction message.
         """
         message = GroupTransactionMessage(
-            group_id=group_id, user_id=user_id, amount=amount, type=transaction_type
+            group_id=group_id,
+            user_id=user_id,
+            amount=amount,
+            type=transaction_type,
         )
         self.session.add(message)
-
-        group = await self.get_group_by_id(group_id)
-        if group:
-            group.current_balance += Decimal(str(amount))
-            self.session.add(group)
-
-        await self.session.commit()
-        await self.session.refresh(message)
         return message

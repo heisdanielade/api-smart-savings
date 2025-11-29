@@ -39,6 +39,22 @@ class WalletRepository:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def update_locked_amount(self, wallet_id: UUID, amount_delta: float) -> None:
+        """
+        Update wallet's locked amount by a delta.
+        
+        Args:
+            wallet_id (UUID): The wallet ID.
+            amount_delta (float): The amount to add (positive) or subtract (negative).
+        """
+        from sqlalchemy import update
+        
+        await self.db.execute(
+            update(Wallet)
+            .where(Wallet.id == wallet_id)
+            .values(locked_amount=Wallet.locked_amount + amount_delta)
+        )
+
 
 class TransactionRepository:
     """Repository handling transaction persistence for wallets."""
