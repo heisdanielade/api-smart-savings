@@ -29,7 +29,7 @@ async def create_group(
     return await service.create_group(group_in, current_user)
 
 
-@router.get("/{group_id}", response_model=GroupDetailsRead)
+@router.get("/{group_id}", response_model=GroupDetailsRead, status_code=status.HTTP_200_OK)
 async def get_group(
     group_id: uuid.UUID,
     service: GroupService = Depends(get_group_service),
@@ -41,7 +41,7 @@ async def get_group(
     return await service.get_group(group_id, current_user)
 
 
-@router.patch("/{group_id}/settings", response_model=GroupRead)
+@router.patch("/{group_id}/settings", response_model=GroupRead, status_code=status.HTTP_200_OK)
 async def update_group_settings(
     group_id: uuid.UUID,
     group_in: GroupUpdate,
