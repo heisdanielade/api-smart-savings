@@ -71,9 +71,19 @@ class GroupTransactionMessage(GroupTransactionMessageBase, table=True):
     user: "User" = Relationship()
 
 
+class RemovedGroupMember(SQLModel, table=True):
+    __tablename__ = "removed_group_members"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    group_id: uuid.UUID = Field(foreign_key="groups.id", nullable=False)
+    user_id: uuid.UUID = Field(foreign_key="app_user.id", nullable=False)
+    removed_at: datetime = Field(sa_column=Column(DateTime(timezone=True), server_default=func.now()))
+
+
 from app.modules.user.models import User
 
 Group.model_rebuild()
 GroupMember.model_rebuild()
 GroupTransactionMessage.model_rebuild()
+RemovedGroupMember.model_rebuild()
 User.model_rebuild()

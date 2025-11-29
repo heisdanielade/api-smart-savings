@@ -65,6 +65,7 @@ class Settings(BaseSettings):
     # SCHEDULE
     HARD_DELETE_RETENTION_DAYS: Optional[int] = 14
     HARD_DELETE_CRON_INTERVAL_HOURS: Optional[int] = 24
+    REMOVE_MEMBER_COOLDOWN_DAYS: Optional[int] = 7
 
     model_config = ConfigDict(env_file=".env", extra="ignore")
 

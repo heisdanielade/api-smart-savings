@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
-from app.modules.group.models import Group, GroupMember, GroupTransactionMessage
+from app.modules.group.models import Group, GroupMember, GroupTransactionMessage, RemovedGroupMember
 from app.modules.group.schemas import GroupCreate, GroupUpdate
 from app.modules.shared.enums import GroupRole, TransactionStatus, TransactionType
 from app.modules.wallet.models import Transaction, Wallet
@@ -146,6 +146,9 @@ class GroupRepository:
         )
         member = result.scalars().first()
         if member:
+            removed_member = RemovedGroupMember(group_id=group_id, user_id=user_id)
+            self.session.add(removed_member)
+            
             await self.session.delete(member)
             await self.session.commit()
             return True
@@ -163,6 +166,24 @@ class GroupRepository:
         """
         result = await self.session.execute(select(GroupMember).where(GroupMember.group_id == group_id))
         return result.scalars().all()
+
+    async def get_removed_member(self, group_id: uuid.UUID, user_id: uuid.UUID) -> Optional[RemovedGroupMember]:
+        """
+        Retrieves a removed member record.
+
+        Args:
+            group_id (uuid.UUID): The ID of the group.
+            user_id (uuid.UUID): The ID of the user.
+
+        Returns:
+            Optional[RemovedGroupMember]: The removed member object if found, otherwise None.
+        """
+        result = await self.session.execute(
+            select(RemovedGroupMember)
+            .where(RemovedGroupMember.group_id == group_id, RemovedGroupMember.user_id == user_id)
+            .order_by(RemovedGroupMember.removed_at.desc())
+        )
+        return result.scalars().first()
 
     async def create_contribution(
         self, group: Group, wallet: Wallet, user_id: uuid.UUID, amount: Decimal

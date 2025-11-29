@@ -1,6 +1,7 @@
 # app/modules/group/service.py
 
 import uuid
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -8,6 +9,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_session, get_current_user
+from app.core.config import settings
 from app.modules.group.repository import GroupRepository
 from app.modules.group.schemas import (
     GroupCreate,
@@ -154,6 +156,19 @@ async def add_group_member(
     if any(member.user_id == member_in.user_id for member in members):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User is already a member")
 
+    if len(members) >= 7:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Group cannot have more than 7 members")
+
+    # Cooldown validation
+    removed_member = await repo.get_removed_member(group_id, member_in.user_id)
+    if removed_member:
+        cooldown_days = settings.REMOVE_MEMBER_COOLDOWN_DAYS
+        if removed_member.removed_at + timedelta(days=cooldown_days) > datetime.now(timezone.utc):
+             raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, 
+                detail=f"User cannot rejoin the group until the {cooldown_days}-day cooldown period has passed."
+            )
+
     await repo.add_member_to_group(group_id, member_in.user_id)
     return JSONResponse(
         status_code=status.HTTP_201_CREATED,
@@ -180,6 +195,15 @@ async def remove_group_member(
 
     if member_in.user_id == group.admin_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Admin cannot be removed")
+
+    # Check if member has contributions
+    members = await repo.get_group_members(group_id)
+    member_to_remove = next((m for m in members if m.user_id == member_in.user_id), None)
+    if member_to_remove and member_to_remove.contributed_amount > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="Member cannot be removed while they have active contributions. Please withdraw funds first."
+        )
 
     removed = await repo.remove_member_from_group(group_id, member_in.user_id)
     if removed:
@@ -212,6 +236,12 @@ async def contribute_to_group(
     members = await repo.get_group_members(group_id)
     if not any(str(m.user_id) == str(current_user.id) for m in members):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a member of this group")
+
+    if len(members) < 2:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="Group must have at least 2 members to accept contributions."
+        )
 
     wallet = await wallet_repo.get_wallet_by_user_id(current_user.id)
     if not wallet:
