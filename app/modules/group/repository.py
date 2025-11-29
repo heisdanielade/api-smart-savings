@@ -234,7 +234,7 @@ class GroupRepository:
             if not wallet:
                 raise ValueError("Wallet not found")
 
-            wallet.total_balance -= amount
+            wallet.locked_amount += amount
             self.session.add(wallet)
 
             wallet_transaction = Transaction(
@@ -335,7 +335,7 @@ class GroupRepository:
             await self.session.execute(
                 update(Wallet)
                 .where(Wallet.id == wallet.id)
-                .values(total_balance=Wallet.total_balance + amount)
+                .values(locked_amount=Wallet.locked_amount - amount)
             )
 
             wallet_transaction = Transaction(
