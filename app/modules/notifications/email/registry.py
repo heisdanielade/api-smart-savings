@@ -1,8 +1,17 @@
 # app/modules/notifications/email/registry.py
 
-from app.modules.notifications.schemas import (VerificationEmailContext, BaseEmailContext,
-                                               LoginNotificationContext, PasswordResetContext, WalletTransactionContext,
-                                               GDPRDataExportContext)
+from app.modules.notifications.schemas import (
+    VerificationEmailContext, 
+    BaseEmailContext,
+    LoginNotificationContext, 
+    PasswordResetContext, 
+    WalletTransactionContext,
+    GDPRDataExportContext,
+    GroupContributionContext,
+    GroupWithdrawalContext,
+    GroupMemberContext,
+    GroupMilestoneContext,
+)
 from app.modules.shared.enums import NotificationType
 
 EMAIL_TEMPLATES = {
@@ -75,5 +84,35 @@ EMAIL_TEMPLATES = {
         "template": "wallet/notify-wallet-withdrawal.html",
         "subject": "[{{app_name}}] Withdrawal Request Received",
         "context_model": WalletTransactionContext,
+    },
+    NotificationType.GROUP_CONTRIBUTION_NOTIFICATION: {
+        "template": "group/notify-group-contribution.html",
+        "subject": "[{{app_name}}] Group Contribution Successful",
+        "context_model": GroupContributionContext,
+    },
+    NotificationType.GROUP_WITHDRAWAL_NOTIFICATION: {
+        "template": "group/notify-group-withdrawal.html",
+        "subject": "[{{app_name}}] Group Withdrawal Successful",
+        "context_model": GroupWithdrawalContext,
+    },
+    NotificationType.GROUP_MEMBER_ADDED_NOTIFICATION: {
+        "template": "group/notify-group-member-added.html",
+        "subject": "[{{app_name}}] Welcome to {{group_name}}",
+        "context_model": GroupMemberContext,
+    },
+    NotificationType.GROUP_MEMBER_REMOVED_NOTIFICATION: {
+        "template": "group/notify-group-member-removed.html",
+        "subject": "[{{app_name}}] Removed from {{group_name}}",
+        "context_model": GroupMemberContext,
+    },
+    NotificationType.GROUP_MILESTONE_50_NOTIFICATION: {
+        "template": "group/notify-group-milestone.html",
+        "subject": "[{{app_name}}] 🎉 {{group_name}} - 50% Milestone Reached!",
+        "context_model": GroupMilestoneContext,
+    },
+    NotificationType.GROUP_MILESTONE_100_NOTIFICATION: {
+        "template": "group/notify-group-milestone.html",
+        "subject": "[{{app_name}}] 🎉 {{group_name}} - Goal Achieved!",
+        "context_model": GroupMilestoneContext,
     },
 }
