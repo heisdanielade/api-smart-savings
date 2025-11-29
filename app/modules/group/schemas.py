@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, PositiveFloat
+from pydantic import BaseModel, ConfigDict, Field, PositiveFloat
 
 from app.modules.shared.enums import GroupRole, TransactionType
 
@@ -45,8 +45,7 @@ class GroupRead(GroupBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Group Member Schemas
@@ -71,8 +70,7 @@ class GroupMemberRead(GroupMemberBase):
     contributed_amount: float
     joined_at: datetime
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Group Transaction Schemas
@@ -97,8 +95,7 @@ class GroupTransactionMessageRead(GroupTransactionMessageBase):
     user_id: uuid.UUID
     timestamp: datetime
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Detailed View Schemas
