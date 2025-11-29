@@ -1,7 +1,7 @@
 # app/modules/group/models.py
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, TYPE_CHECKING
 from sqlmodel import Field, Relationship, SQLModel, Column, DateTime, func, String, Numeric, Boolean, Enum as SQLAlchemyEnum
 from app.modules.shared.enums import GroupRole, TransactionType
@@ -22,8 +22,8 @@ class Group(GroupBase, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     admin_id: uuid.UUID = Field(foreign_key="app_user.id")
-    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
-    updated_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), nullable=False)
 
     admin: "User" = Relationship(back_populates="groups_admin")
     members: List["GroupMember"] = Relationship(
