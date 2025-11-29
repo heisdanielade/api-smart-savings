@@ -25,6 +25,8 @@ from app.modules.wallet.service import WalletService
 from app.modules.shared.enums import Role
 from app.modules.rbac.repository import RBACRepository
 from app.modules.rbac.service import RBACService
+from app.modules.group.service import GroupService
+from app.modules.group.repository import GroupRepository
 
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/v1/auth/login")
@@ -166,6 +168,14 @@ async def get_rbac_service(db: AsyncSession = Depends(get_session)):
     repo = RBACRepository(db)
     return RBACService(repo)
 
+async def get_group_service(db: AsyncSession = Depends(get_session)):
+    """Dependency factory for group service."""
+    group_repo = GroupRepository(db)
+    user_repo = UserRepository(db)
+    wallet_repo = WalletRepository(db)
+    notification_manager = EmailNotificationService()
+    return GroupService(group_repo, user_repo, wallet_repo, notification_manager)
+
 
 # =======================
 # REPOSITORY
@@ -182,6 +192,9 @@ async def get_gdpr_repo(db: AsyncSession = Depends(get_session)):
 async def get_rbac_repo(db: AsyncSession = Depends(get_session)):
     """Dependency factory for rbac repository."""
     return RBACRepository(db)
+async def get_group_repo(db: AsyncSession = Depends(get_session)):
+    """Dependency factory for group repository."""
+    return GroupRepository(db)
 
 
 
