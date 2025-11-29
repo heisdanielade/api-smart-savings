@@ -28,8 +28,8 @@ def upgrade() -> None:
     sa.Column('require_admin_approval_for_funds_removal', sa.Boolean(), nullable=False),
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('admin_id', sa.Uuid(), nullable=False),
-    sa.Column('created_at', sa.DateTime(), nullable=False, server_default=sa.text('now()')),
-    sa.Column('updated_at', sa.DateTime(), nullable=False, server_default=sa.text('now()')),
+    sa.Column('created_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('now()')),
+    sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('now()')),
     sa.ForeignKeyConstraint(['admin_id'], ['app_user.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
