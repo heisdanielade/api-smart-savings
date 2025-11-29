@@ -48,11 +48,7 @@ class GroupRead(GroupBase):
 
 
 # Group Member Schemas
-class GroupMemberBase(BaseModel):
-    """Base schema for group member data."""
 
-    user_id: uuid.UUID = Field(..., description="The ID of the user to add to the group")
-    role: GroupRole = Field(default=GroupRole.MEMBER, description="The role of the member in the group")
 
 
 class GroupMemberCreate(BaseModel):
@@ -61,8 +57,11 @@ class GroupMemberCreate(BaseModel):
     user_id: uuid.UUID = Field(..., description="The ID of the user to add to the group")
 
 
-class GroupMemberRead(GroupMemberBase):
+class GroupMemberRead(BaseModel):
     """Schema for reading group member data."""
+
+    user_id: uuid.UUID
+    role: GroupRole
 
     id: uuid.UUID
     group_id: uuid.UUID
@@ -73,11 +72,7 @@ class GroupMemberRead(GroupMemberBase):
 
 
 # Group Transaction Schemas
-class GroupTransactionMessageBase(BaseModel):
-    """Base schema for group transaction messages."""
 
-    amount: PositiveFloat = Field(..., description="The amount of the transaction")
-    type: TransactionType = Field(..., description="The type of transaction (deposit or withdrawal)")
 
 
 class GroupTransactionMessageCreate(BaseModel):
@@ -86,8 +81,11 @@ class GroupTransactionMessageCreate(BaseModel):
     amount: PositiveFloat = Field(..., description="The amount of the transaction")
 
 
-class GroupTransactionMessageRead(GroupTransactionMessageBase):
+class GroupTransactionMessageRead(BaseModel):
     """Schema for reading group transaction messages."""
+
+    amount: PositiveFloat
+    type: TransactionType
 
     id: uuid.UUID
     group_id: uuid.UUID
