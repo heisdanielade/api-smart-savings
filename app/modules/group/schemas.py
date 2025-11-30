@@ -6,24 +6,19 @@ from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, PositiveFloat
 
-from app.modules.shared.enums import GroupRole, TransactionType
+from app.modules.shared.enums import GroupRole, TransactionType, Currency
 
 
 # Group Schemas
-class GroupBase(BaseModel):
-    """Base schema for group data."""
+class GroupCreate(BaseModel):
+    """Schema for creating a new group."""
 
     name: str = Field(..., min_length=3, max_length=50, description="Name of the group")
     target_balance: PositiveFloat = Field(..., description="The savings goal for the group")
     require_admin_approval_for_funds_removal: bool = Field(
         default=False, description="Whether admin approval is required for withdrawals"
     )
-
-
-class GroupCreate(GroupBase):
-    """Schema for creating a new group."""
-
-    pass
+    currency: Currency = Field(..., description="The base currency for the group")
 
 
 class GroupUpdate(BaseModel):
@@ -34,10 +29,16 @@ class GroupUpdate(BaseModel):
     require_admin_approval_for_funds_removal: Optional[bool] = Field(
         None, description="Update withdrawal approval requirement"
     )
+    currency: Optional[Currency] = Field(None, description="Update the group's base currency")
 
 
-class GroupRead(GroupBase):
+class GroupRead(BaseModel):
     """Schema for reading group data, including database-generated fields."""
+
+    name: str
+    target_balance: PositiveFloat
+    require_admin_approval_for_funds_removal: bool
+    currency: Currency
 
     id: uuid.UUID
     current_balance: float
@@ -48,9 +49,6 @@ class GroupRead(GroupBase):
 
 
 # Group Member Schemas
-
-
-
 class GroupMemberCreate(BaseModel):
     """Schema for adding a new member to a group."""
 

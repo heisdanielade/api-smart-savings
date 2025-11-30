@@ -9,7 +9,7 @@ from app.modules.group.service import GroupService
 from app.modules.group.models import Group, GroupMember, RemovedGroupMember
 from app.modules.group.schemas import GroupMemberCreate, GroupTransactionMessageCreate
 from app.modules.user.models import User
-from app.modules.shared.enums import GroupRole, TransactionType
+from app.modules.shared.enums import GroupRole, TransactionType, Currency
 
 # Mock Settings
 @pytest.fixture
@@ -108,7 +108,8 @@ async def test_add_group_member_cooldown(group_service, mock_group_repo, current
     assert "cooldown period" in exc.value.detail
 
 @pytest.mark.asyncio
-async def test_remove_group_member_with_contributions(group_service, mock_group_repo, mock_user_repo, current_user, background_tasks):
+async def test_remove_group_member_with_contributions(group_service, mock_group_repo, mock_user_repo, current_user, background_tasks, monkeypatch):
+    monkeypatch.setattr("app.modules.group.service.settings.MIN_GROUP_THRESHOLD_AMOUNT", 10.0)
     group_id = uuid.uuid4()
     user_id_to_remove = uuid.uuid4()
     
@@ -116,7 +117,7 @@ async def test_remove_group_member_with_contributions(group_service, mock_group_
     mock_group_repo.get_group_by_id.return_value = Group(id=group_id, name="Test Group", target_balance=1000)
     mock_group_repo.is_user_admin.return_value = True
     
-    # Mock member with contributions
+    # Mock member with contributions > threshold
     member = GroupMember(group_id=group_id, user_id=user_id_to_remove, contributed_amount=50.0)
     mock_group_repo.get_group_members.return_value = [member]
     
@@ -129,7 +130,7 @@ async def test_remove_group_member_with_contributions(group_service, mock_group_
         await group_service.remove_group_member(group_id, member_in, current_user=current_user, background_tasks=background_tasks)
     
     assert exc.value.status_code == status.HTTP_400_BAD_REQUEST
-    assert "active contributions" in exc.value.detail
+    assert "contributions greater than" in exc.value.detail
 
 @pytest.mark.asyncio
 async def test_contribute_to_group_min_members(group_service, mock_group_repo, mock_wallet_repo, current_user, background_tasks):
@@ -155,3 +156,20 @@ async def test_contribute_to_group_min_members(group_service, mock_group_repo, m
     
     assert exc.value.status_code == status.HTTP_400_BAD_REQUEST
     assert "at least 2 members" in exc.value.detail
+
+@pytest.mark.asyncio
+async def test_delete_group_with_balance(group_service, mock_group_repo, monkeypatch):
+    monkeypatch.setattr("app.modules.group.service.settings.MIN_GROUP_THRESHOLD_AMOUNT", 10.0)
+    
+    user = User(id=uuid.uuid4(), email="admin@example.com")
+    group_id = uuid.uuid4()
+    group = Group(id=group_id, name="Test Group", target_balance=1000.0, current_balance=100.0, currency=Currency.EUR) # Balance > Threshold
+    
+    mock_group_repo.get_group_by_id.return_value = group
+    mock_group_repo.is_user_admin.return_value = True
+    
+    with pytest.raises(HTTPException) as exc:
+        await group_service.delete_group(group_id, user)
+    
+    assert exc.value.status_code == status.HTTP_400_BAD_REQUEST
+    assert "Cannot delete group with balance" in exc.value.detail

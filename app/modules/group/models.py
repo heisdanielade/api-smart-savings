@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional, List, TYPE_CHECKING
 from sqlmodel import Field, Relationship, SQLModel, Column, DateTime, func, String, Numeric, Boolean, Enum as SQLAlchemyEnum
-from app.modules.shared.enums import GroupRole, TransactionType
+from app.modules.shared.enums import GroupRole, TransactionType, Currency
 
 if TYPE_CHECKING:
     from app.modules.user.models import User
@@ -15,6 +15,9 @@ class GroupBase(SQLModel):
     target_balance: float = Field(sa_column=Column(Numeric(10, 2), nullable=False))
     current_balance: float = Field(sa_column=Column(Numeric(10, 2), default=0.0))
     require_admin_approval_for_funds_removal: bool = Field(default=False)
+    currency: Currency = Field(
+        sa_column=Column(SQLAlchemyEnum(Currency), default=Currency.EUR, nullable=False)
+    )
 
 
 class Group(GroupBase, table=True):

@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     LOG_RETENTION_DAYS: Optional[int] = None
     # AMOUNTS
     MIN_BALANCE_THRESHOLD: Optional[float] = None
+    MIN_GROUP_THRESHOLD_AMOUNT: Optional[float] = None
     MIN_WALLET_TRANSACTION_AMOUNT: Optional[float] = None
     MAX_WALLET_TRANSACTION_AMOUNT: Optional[float] = None
     # GOOGLE

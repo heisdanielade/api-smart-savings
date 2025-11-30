@@ -74,6 +74,12 @@ class GroupService:
         if not await self.group_repo.is_user_admin(group_id, current_user.id):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admin can delete the group")
 
+        if group.current_balance > settings.MIN_GROUP_THRESHOLD_AMOUNT:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot delete group with balance greater than {settings.MIN_GROUP_THRESHOLD_AMOUNT}"
+            )
+
         deleted = await self.group_repo.delete_group(group_id)
         if deleted:
             return JSONResponse(
@@ -170,10 +176,10 @@ class GroupService:
         # Check if member has contributions
         members = await self.group_repo.get_group_members(group_id)
         member_to_remove = next((m for m in members if m.user_id == member_in.user_id), None)
-        if member_to_remove and member_to_remove.contributed_amount > 0:
+        if member_to_remove and member_to_remove.contributed_amount > settings.MIN_GROUP_THRESHOLD_AMOUNT:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, 
-                detail="Member cannot be removed while they have active contributions. Please withdraw funds first."
+                detail=f"Member cannot be removed while they have active contributions greater than {settings.MIN_GROUP_THRESHOLD_AMOUNT}. Please withdraw funds first."
             )
 
         # Get removed member user object before removal
