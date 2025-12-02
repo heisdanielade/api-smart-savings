@@ -8,7 +8,7 @@ from redis.asyncio import Redis
 from app.core.utils.exceptions import CustomException
 from app.modules.user.models import User
 from app.core.middleware.rate_limiter import limiter
-from app.core.utils.response import standard_response
+from app.core.utils.response import standard_response, FinancialAnalyticsResponse
 from app.api.dependencies import get_current_user, get_user_service, get_redis, get_user_repo
 from app.modules.user.repository import UserRepository
 from app.modules.user.service import UserService
@@ -192,13 +192,13 @@ async def view_login_history(
     )
 
 
-@router.get("/me/financial-analytics", status_code=status.HTTP_200_OK)
-@limiter.limit("15/minute")
+@router.get("/me/financial-analytics", status_code=status.HTTP_200_OK, response_model=FinancialAnalyticsResponse)
+@limiter.limit("5/minute")
 async def get_financial_analytics(
     request: Request,
     current_user: User = Depends(get_current_user),
     user_service: UserService = Depends(get_user_service)
-) -> dict[str, Any]:
+) -> FinancialAnalyticsResponse:
     """
     Retrieve comprehensive financial analytics for the authenticated user.
     
@@ -208,40 +208,14 @@ async def get_financial_analytics(
     
 
     Returns:
-        dict[str, Any]: Standard response containing comprehensive analytics data
+        FinancialAnalyticsResponse: Standard response containing comprehensive analytics data
         
     Raises:
         HTTPException: 429 Too Many Requests if rate limit exceeded
-        
-    Example Response:
-        ```json
-        {
-            "data": {
-                "total_transactions": 42,
-                "total_amount_in": 680.0,
-                "total_amount_out": 150.0,
-                "net_flow": 530.0,
-                "transaction_frequency_last_30_days": 11,
-                "total_contributed_to_groups": 120.0,
-                "total_groups_active": 3,
-                "transaction_type_distribution": {
-                    "deposit": 30,
-                    "withdrawal": 10,
-                    "group_contribution": 2
-                },
-                "group_contribution_share_per_group": {
-                    "Travel Squad": 50.0,
-                    "Wedding Fund": 40.0,
-                    "Birthday Pool": 30.0
-                }
-            }
-        }
-        ```
     """
     analytics_data = await user_service.get_financial_analytics(current_user=current_user)
     
-    return standard_response(
-        status="success",
-        message="Financial analytics retrieved successfully.",
-        data=analytics_data
+    return FinancialAnalyticsResponse(
+        data=analytics_data,
+        message="Financial analytics retrieved successfully."
     )

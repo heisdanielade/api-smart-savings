@@ -148,5 +148,4 @@ class UserGroupsResponse(BaseResponse):
     data: List[GroupSummaryData]
 
 class FinancialAnalyticsResponse(BaseResponse):
-    """Response schema for financial analytics endpoint."""
     data: FinancialAnalyticsData
