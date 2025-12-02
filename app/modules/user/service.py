@@ -152,3 +152,61 @@ class UserService:
             recipients=[new_email]
         )
 
+    async def get_financial_analytics(self, current_user: User) -> dict[str, Any]:
+        """
+        Generate comprehensive financial analytics for a user.
+        
+        Aggregates data from wallet transactions and group contributions to provide
+        insights into the user's financial activity, spending patterns, and savings behavior.
+        
+        Args:
+            current_user (User): The authenticated user.
+            
+        Returns:
+            dict[str, Any]: Dictionary containing:
+                - total_transactions: Count of all wallet transactions
+                - total_amount_in: Sum of all deposits
+                - total_amount_out: Sum of all withdrawals
+                - net_flow: Difference between deposits and withdrawals
+                - transaction_frequency_last_30_days: Recent transaction count
+                - total_contributed_to_groups: Total group contributions
+                - total_groups_active: Number of active group memberships
+                - transaction_type_distribution: Breakdown by transaction type
+                - group_contribution_share_per_group: Per-group contribution amounts
+        """
+        from app.modules.user.schemas import TransactionTypeDistribution
+        
+        # Get wallet transaction statistics
+        wallet_stats = await self.user_repo.get_wallet_transaction_stats(current_user.id)
+        
+        # Get recent transaction frequency
+        recent_transactions = await self.user_repo.get_transaction_count_last_n_days(
+            current_user.id, days=30
+        )
+        
+        # Get transaction type distribution
+        type_distribution = await self.user_repo.get_transaction_type_distribution(current_user.id)
+        
+        # Get group contribution data
+        total_group_contributions = await self.user_repo.get_total_group_contributions(current_user.id)
+        group_breakdown = await self.user_repo.get_group_contribution_breakdown(current_user.id)
+        active_groups_count = await self.user_repo.get_active_groups_count(current_user.id)
+        
+        # Compute derived metrics
+        net_flow = wallet_stats["total_amount_in"] - wallet_stats["total_amount_out"]
+        
+        # Structure the response
+        analytics_data = {
+            "total_transactions": wallet_stats["total_transactions"],
+            "total_amount_in": wallet_stats["total_amount_in"],
+            "total_amount_out": wallet_stats["total_amount_out"],
+            "net_flow": net_flow,
+            "transaction_frequency_last_30_days": recent_transactions,
+            "total_contributed_to_groups": total_group_contributions,
+            "total_groups_active": active_groups_count,
+            "transaction_type_distribution": type_distribution,
+            "group_contribution_share_per_group": group_breakdown
+        }
+        
+        return analytics_data
+

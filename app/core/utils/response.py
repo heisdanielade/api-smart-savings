@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, ConfigDict
 
 from app.core.config import settings
 from app.modules.shared.enums import Role, Currency, GroupRole, TransactionType
+from app.modules.user.schemas import FinancialAnalyticsData
 from uuid import UUID
 
 app_name = settings.APP_NAME
@@ -145,3 +146,7 @@ class GroupSummaryData(BaseModel):
 
 class UserGroupsResponse(BaseResponse):
     data: List[GroupSummaryData]
+
+class FinancialAnalyticsResponse(BaseResponse):
+    """Response schema for financial analytics endpoint."""
+    data: FinancialAnalyticsData

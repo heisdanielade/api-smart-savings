@@ -51,3 +51,30 @@ class UserResponse(BaseModel):
     preferred_currency: Currency
     
     model_config = ConfigDict(from_attributes=True)
+
+
+class TransactionTypeDistribution(BaseModel):
+    """Schema for transaction type distribution breakdown."""
+    deposit: int 
+    withdrawal: int 
+    group_contribution: int 
+
+
+class FinancialAnalyticsData(BaseModel):
+    """Schema for comprehensive financial analytics data."""
+    # Core metrics
+    total_transactions: int 
+    total_amount_in: float 
+    total_amount_out: float 
+    net_flow: float 
+    transaction_frequency_last_30_days: int 
+    
+    # Group-related metrics
+    total_contributed_to_groups: float 
+    total_groups_active: int 
+    
+    # Distributions and breakdowns
+    transaction_type_distribution: TransactionTypeDistribution 
+    group_contribution_share_per_group: dict[str, float] 
+    
+    model_config = ConfigDict(from_attributes=True)
