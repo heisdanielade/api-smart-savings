@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import datetime
+from decimal import Decimal
 from typing import List, TYPE_CHECKING
 from sqlmodel import Field, Relationship, SQLModel, Column, DateTime, Numeric
 from pydantic import ConfigDict
@@ -13,8 +14,8 @@ if TYPE_CHECKING:
 
 class GroupBase(SQLModel):
     name: str = Field(nullable=False)
-    target_balance: float = Field(sa_column=Column(Numeric(10, 2), nullable=False))
-    current_balance: float = Field(default=0.0, sa_column=Column(Numeric(10, 2)))
+    target_balance: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
+    current_balance: Decimal = Field(default=Decimal("0.0"), sa_column=Column(Numeric(10, 2)))
     require_admin_approval_for_funds_removal: bool = Field(default=False)
     currency: Currency = Field(
         sa_column=Column(Currency.sa_enum(), default=Currency.EUR, nullable=False)
@@ -45,7 +46,7 @@ class Group(GroupBase, table=True):
 
 class GroupMemberBase(SQLModel):
     role: GroupRole = Field(sa_column=Column(GroupRole.sa_enum(), default=GroupRole.MEMBER))
-    contributed_amount: float = Field(sa_column=Column(Numeric(10, 2), default=0.0))
+    contributed_amount: Decimal = Field(sa_column=Column(Numeric(10, 2), default=Decimal("0.0")))
 
 
 class GroupMember(GroupMemberBase, table=True):
@@ -65,7 +66,7 @@ class GroupMember(GroupMemberBase, table=True):
 
 
 class GroupTransactionMessageBase(SQLModel):
-    amount: float = Field(sa_column=Column(Numeric(10, 2), nullable=False))
+    amount: Decimal = Field(sa_column=Column(Numeric(10, 2), nullable=False))
     type: TransactionType = Field(
         sa_column=Column(TransactionType.sa_enum()),
         default=TransactionType.GROUP_SAVINGS_DEPOSIT,
