@@ -111,8 +111,8 @@ async def get_current_user(
 
 async def get_current_user_ws(
     token: str,
-    redis: Redis = Depends(get_redis),
-    user_repo: UserRepository = Depends(lambda session=Depends(get_session): UserRepository(session)),
+    redis: Redis,
+    user_repo: UserRepository,
 ) -> User:
     """
     Retrieve the current authenticated user for WebSocket connections.
