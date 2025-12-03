@@ -1,6 +1,7 @@
 # app/api/v1/routes/group.py
 
 import uuid
+import logging
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, status, BackgroundTasks, Request, WebSocket, WebSocketDisconnect
 from fastapi.encoders import jsonable_encoder
@@ -311,6 +312,7 @@ async def group_websocket(
     try:
         user = await get_current_user_ws(token, redis, service.user_repo)
     except Exception as e:
+        logging.error(f"WebSocket authentication failed for group {group_id}: {str(e)}", exc_info=True)
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
@@ -357,10 +359,12 @@ async def group_websocket(
                     await manager.broadcast(response, group_id)
                     
             except Exception as e:
+                logging.error(f"Error processing WebSocket action for group {group_id}: {str(e)}", exc_info=True)
                 await websocket.send_json({"error": str(e)})
                 
     except WebSocketDisconnect:
         manager.disconnect(websocket, group_id)
     except Exception as e:
         # Handle other unexpected errors
+        logging.error(f"Unexpected error in WebSocket for group {group_id}: {str(e)}", exc_info=True)
         manager.disconnect(websocket, group_id)
