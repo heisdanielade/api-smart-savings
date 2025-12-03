@@ -37,7 +37,7 @@ class GroupService:
         self.wallet_repo = wallet_repo
         self.notification_manager = notification_manager
 
-    async def create_group(self, group_in: GroupUpdate, current_user: User):
+    async def create_group(self, group_in: GroupBase, current_user: User):
         """
         Create a new group.
         """

@@ -1,19 +1,28 @@
 from typing import List, Dict
 from fastapi import WebSocket
 import uuid
+import asyncio
 
 class ConnectionManager:
+    """Manages WebSocket connections for group chat."""
+    
     def __init__(self):
         # Map group_id to list of active websockets
         self.active_connections: Dict[uuid.UUID, List[WebSocket]] = {}
+        self.lock = asyncio.Lock()
 
     async def connect(self, websocket: WebSocket, group_id: uuid.UUID):
+        """Accept and store a new WebSocket connection for a group."""
         await websocket.accept()
-        if group_id not in self.active_connections:
-            self.active_connections[group_id] = []
-        self.active_connections[group_id].append(websocket)
+        async with self.lock:
+            if group_id not in self.active_connections:
+                self.active_connections[group_id] = []
+            self.active_connections[group_id].append(websocket)
 
     def disconnect(self, websocket: WebSocket, group_id: uuid.UUID):
+        """Remove a WebSocket connection from a group."""
+        # Note: This method is intentionally synchronous to be called from exception handlers
+        # We'll make it async-safe by checking if we're in an async context
         if group_id in self.active_connections:
             if websocket in self.active_connections[group_id]:
                 self.active_connections[group_id].remove(websocket)
@@ -21,13 +30,16 @@ class ConnectionManager:
                 del self.active_connections[group_id]
 
     async def broadcast(self, message: dict, group_id: uuid.UUID):
-        if group_id in self.active_connections:
-            for connection in self.active_connections[group_id]:
-                try:
-                    await connection.send_json(message)
-                except Exception:
-                    # Handle potential connection issues (e.g., client disconnected)
-                    # Ideally, we should remove the dead connection here or let disconnect handle it
-                    pass
+        """Broadcast a message to all connections in a group."""
+        async with self.lock:
+            connections = list(self.active_connections.get(group_id, []))
+        
+        for connection in connections:
+            try:
+                await connection.send_json(message)
+            except Exception:
+                # Handle potential connection issues (e.g., client disconnected)
+                # The disconnect method will clean up the connection
+                self.disconnect(connection, group_id)
 
 manager = ConnectionManager()
