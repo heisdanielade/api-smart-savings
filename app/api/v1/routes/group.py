@@ -338,6 +338,15 @@ async def group_websocket(
             action = data.get("action")
             
             try:
+                # Validate action field
+                if not action:
+                    await websocket.send_json({"error": "Missing 'action' field in message"})
+                    continue
+                
+                if action not in ["contribute", "withdraw"]:
+                    await websocket.send_json({"error": f"Invalid action '{action}'. Supported actions: contribute, withdraw"})
+                    continue
+                
                 response = None
                 
                 if action == "contribute":
@@ -365,11 +374,20 @@ async def group_websocket(
                     
             except Exception as e:
                 logging.error(f"Error processing WebSocket action for group {group_id}: {str(e)}", exc_info=True)
-                await websocket.send_json({"error": str(e)})
+                # Send user-friendly error message without exposing implementation details
+                error_message = "Failed to process transaction. Please try again."
+                
+                # Only expose specific error types that are safe
+                from app.core.utils.exceptions import CustomException
+                if isinstance(e, CustomException):
+                    error_message = e.detail if hasattr(e, 'detail') else str(e)
+                
+                await websocket.send_json({"error": error_message})
                 
     except WebSocketDisconnect:
+        # Expected: client disconnected normally
         manager.disconnect(websocket, group_id)
     except Exception as e:
-        # Handle other unexpected errors
+        # Unexpected: log for debugging and monitoring
         logging.error(f"Unexpected error in WebSocket for group {group_id}: {str(e)}", exc_info=True)
         manager.disconnect(websocket, group_id)
