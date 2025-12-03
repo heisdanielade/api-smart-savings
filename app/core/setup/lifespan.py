@@ -37,7 +37,7 @@ async def run_lifespan(app: FastAPI):
         # await anonymize_soft_deleted_users()
 
     # --- General startup tasks ---
-    cleanup_old_logs()
+    await cleanup_old_logs()
     await set_utc_timezone()  # Ensure DB session uses UTC timezone
 
     # --- Scheduler for production / recurring jobs ---
