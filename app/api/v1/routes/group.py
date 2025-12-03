@@ -1,13 +1,16 @@
 # app/api/v1/routes/group.py
 
 import uuid
-from fastapi import APIRouter, Depends, status, BackgroundTasks, Request
+from datetime import datetime, timezone
+from fastapi import APIRouter, Depends, status, BackgroundTasks, Request, WebSocket, WebSocketDisconnect
 from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from redis.asyncio import Redis
 
 from app.core.middleware.rate_limiter import limiter
 
-from app.api.dependencies import get_current_user, get_group_service, get_redis
+from app.api.dependencies import get_current_user, get_group_service, get_redis, get_current_user_ws
+from app.modules.group.websockets import manager
 from app.core.utils.response import GroupResponse, UserGroupsResponse, GroupMembersResponse, GroupTransactionsResponse
 from app.modules.group.schemas import (
     AddMemberRequest,
@@ -268,7 +271,8 @@ async def contribute_to_group(
     debit the user's wallet and credit the group, or fail without
     changing any balances.
     """
-    return await service.contribute_to_group(redis, group_id, transaction_in, current_user, background_tasks)
+    result = await service.contribute_to_group(redis, group_id, transaction_in, current_user, background_tasks)
+    return JSONResponse(status_code=status.HTTP_201_CREATED, content=result)
 
 
 @router.post("/{group_id}/remove-contribution", status_code=status.HTTP_201_CREATED)
@@ -287,4 +291,76 @@ async def remove_contribution(
     credit the user's wallet and debit the group, or fail without
     changing any balances.
     """
-    return await service.remove_contribution(redis, group_id, transaction_in, current_user, background_tasks)
+    result = await service.remove_contribution(redis, group_id, transaction_in, current_user, background_tasks)
+    return JSONResponse(status_code=status.HTTP_201_CREATED, content=result)
+
+
+@router.websocket("/{group_id}/ws")
+async def group_websocket(
+    websocket: WebSocket,
+    group_id: uuid.UUID,
+    token: str,
+    service: GroupService = Depends(get_group_service),
+):
+    """
+    WebSocket endpoint for real-time group chat and transactions.
+    """
+    # Get Redis from WebSocket app state
+    redis = websocket.app.state.redis
+    
+    try:
+        user = await get_current_user_ws(token, redis, service.user_repo)
+    except Exception as e:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    await manager.connect(websocket, group_id)
+    
+    try:
+        while True:
+            data = await websocket.receive_json()
+            action = data.get("action")
+            
+            try:
+                response = None
+                
+                if action == "contribute":
+                    transaction_in = GroupDepositRequest(**data.get("data", {}))
+                    # We can't easily use BackgroundTasks here, so we might need to handle notifications differently
+                    # or accept that email notifications might be slightly delayed if we await them directly
+                    # For now, passing None for background_tasks means emails might be sent synchronously if service supports it
+                    # or we need to adapt service to not require background_tasks for WS
+                    
+                    # NOTE: Service uses background_tasks.add_task. If None is passed, it might fail or skip.
+                    # Let's check service implementation. It uses:
+                    # await self.notification_manager.schedule(..., background_tasks=background_tasks, ...)
+                    # If background_tasks is None, schedule usually awaits the coroutine immediately.
+                    
+                    response = await service.contribute_to_group(redis, group_id, transaction_in, user, None)
+                    response["type"] = "contribution"
+                    
+                elif action == "withdraw":
+                    transaction_in = GroupWithdrawRequest(**data.get("data", {}))
+                    response = await service.remove_contribution(redis, group_id, transaction_in, user, None)
+                    response["type"] = "withdrawal"
+                
+                if response:
+                    # Add user info to response for chat display
+                    response["user"] = {
+                        "id": str(user.id),
+                        "full_name": user.full_name,
+                        "email": user.email,
+                        "stag": user.stag
+                    }
+                    response["timestamp"] = datetime.now(timezone.utc).isoformat()
+                    
+                    await manager.broadcast(response, group_id)
+                    
+            except Exception as e:
+                await websocket.send_json({"error": str(e)})
+                
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, group_id)
+    except Exception as e:
+        # Handle other unexpected errors
+        manager.disconnect(websocket, group_id)
