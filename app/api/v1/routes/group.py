@@ -316,6 +316,20 @@ async def group_websocket(
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
+    # Verify user is a member of the group
+    try:
+        members = await service.group_repo.get_group_members(group_id)
+        is_member = any(str(member.user_id) == str(user.id) for member in members)
+        
+        if not is_member:
+            logging.warning(f"User {user.id} attempted to connect to group {group_id} without membership")
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+    except Exception as e:
+        logging.error(f"Failed to verify group membership for user {user.id} in group {group_id}: {str(e)}", exc_info=True)
+        await websocket.close(code=status.WS_1003_UNSUPPORTED_DATA)
+        return
+
     await manager.connect(websocket, group_id)
     
     try:
@@ -328,15 +342,6 @@ async def group_websocket(
                 
                 if action == "contribute":
                     transaction_in = GroupDepositRequest(**data.get("data", {}))
-                    # We can't easily use BackgroundTasks here, so we might need to handle notifications differently
-                    # or accept that email notifications might be slightly delayed if we await them directly
-                    # For now, passing None for background_tasks means emails might be sent synchronously if service supports it
-                    # or we need to adapt service to not require background_tasks for WS
-                    
-                    # NOTE: Service uses background_tasks.add_task. If None is passed, it might fail or skip.
-                    # Let's check service implementation. It uses:
-                    # await self.notification_manager.schedule(..., background_tasks=background_tasks, ...)
-                    # If background_tasks is None, schedule usually awaits the coroutine immediately.
                     
                     response = await service.contribute_to_group(redis, group_id, transaction_in, user, None)
                     response["type"] = "contribution"
