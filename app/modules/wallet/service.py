@@ -73,7 +73,7 @@ class WalletService:
                 "amount": float(transaction.amount),
                 "type": transaction.type.value,
                 "status": transaction.status.value,
-                "created_at": transaction.created_at.isoformat(),
+                "created_at": transaction.created_at.isoformat() if transaction.created_at else None,
                 "executed_at": transaction.executed_at.isoformat() if transaction.executed_at else None,
             }
         }
@@ -152,7 +152,7 @@ class WalletService:
                     "amount": float(tx.amount),
                     "type": tx.type.value,
                     "status": tx.status.value,
-                    "created_at": tx.created_at.isoformat(),
+                    "created_at": tx.created_at.isoformat() if tx.created_at else None,
                     "executed_at": tx.executed_at.isoformat() if tx.executed_at else None,
                 }
                 for tx in transactions
