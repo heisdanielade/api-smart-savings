@@ -3,7 +3,7 @@ import json
 import secrets
 
 from redis.asyncio import Redis
-from fastapi import Depends, HTTPException, status, Request
+from fastapi import Depends, HTTPException, status, Request, WebSocketException
 from fastapi.security import (HTTPBasic, HTTPBasicCredentials,
                               OAuth2PasswordBearer)
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -108,6 +108,58 @@ async def get_current_user(
 
     except Exception as e:
         raise CustomException.e401_unauthorized("Could not validate credentials.")
+
+async def get_current_user_ws(
+    token: str,
+    redis: Redis = Depends(get_redis),
+    user_repo: UserRepository = Depends(lambda session=Depends(get_session): UserRepository(session)),
+) -> User:
+    """
+    Retrieve the current authenticated user for WebSocket connections.
+    """
+    try:
+        payload = decode_token(token)
+        user_email: str | None = payload.get("sub")
+        token_version: int | None = payload.get("ver")
+
+        if not user_email:
+            raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid authentication credentials.")
+
+        cache_key = f"user_current:{user_email}"
+
+        async def fetch_user():
+            _user = await user_repo.get_by_email(user_email)
+            if not _user:
+                 raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason="No account found with this email.")
+            return _user
+
+        user_data = await cache_or_get(
+            redis=redis,
+            key=cache_key,
+            fetch_func=fetch_user,
+            ttl=600
+        )
+
+        # Reconstruct Pydantic model
+        user = User(**user_data) if isinstance(user_data, dict) else user_data
+
+        if token_version != user.token_version:
+            await invalidate_cache(redis, cache_key)
+            raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason="Token has been invalidated. Please log in again.")
+
+        if not user.is_verified:
+             raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason="Your account is not verified.")
+
+        if user.is_deleted:
+             raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason="Your account is scheduled for deletion.")
+
+        return user
+
+    except Exception as e:
+        # If it's already a WebSocketException, re-raise it
+        if isinstance(e, WebSocketException):
+            raise e
+        raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason="Could not validate credentials.")
 
 async def get_current_admin_user(
     current_user: User = Depends(get_current_user)
