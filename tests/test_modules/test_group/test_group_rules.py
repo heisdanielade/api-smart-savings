@@ -61,7 +61,8 @@ def background_tasks():
     return MagicMock(spec=BackgroundTasks)
 
 @pytest.mark.asyncio
-async def test_add_group_member_max_limit(group_service, mock_group_repo, mock_user_repo, current_user, background_tasks):
+async def test_add_group_member_max_limit(group_service, mock_group_repo, mock_user_repo, current_user, background_tasks, monkeypatch):
+    monkeypatch.setattr("app.modules.group.service.settings.MAX_GROUP_MEMBERS", 7)
     group_id = uuid.uuid4()
     user_to_add_id = uuid.uuid4()
     stag_to_add = "newuser"
@@ -78,6 +79,9 @@ async def test_add_group_member_max_limit(group_service, mock_group_repo, mock_u
     mock_group_repo.get_group_members.return_value = [
         GroupMember(group_id=group_id, user_id=uuid.uuid4()) for _ in range(7)
     ]
+    
+    # Mock no removed member (to avoid cooldown check error)
+    mock_group_repo.get_removed_member.return_value = None
     
     member_in = AddMemberRequest(stag=stag_to_add)
     
@@ -106,10 +110,11 @@ async def test_add_group_member_cooldown(group_service, mock_group_repo, mock_us
     mock_group_repo.get_group_members.return_value = []
     
     # Mock removed member within cooldown
+    removed_at = datetime.now(timezone.utc) - timedelta(days=2)
     mock_group_repo.get_removed_member.return_value = RemovedGroupMember(
         group_id=group_id, 
         user_id=user_id_to_add, 
-        removed_at=datetime.now(timezone.utc) - timedelta(days=2) # 2 days ago
+        removed_at=removed_at
     )
     
     member_in = AddMemberRequest(stag=stag_to_add)
