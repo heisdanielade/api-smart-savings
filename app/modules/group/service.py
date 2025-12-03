@@ -444,23 +444,20 @@ class GroupService:
                             },
                         )
 
-        return JSONResponse(
-            status_code=status.HTTP_201_CREATED,
-            content={
-                "message": "Contribution successful",
-                "contribution": {
-                    "amount": float(amount_to_contribute),
-                    "user_id": str(current_user.id),
-                },
-                "group": {
-                    "current_balance": float(updated_group.current_balance) if updated_group else 0.0,
-                    "target_balance": float(updated_group.target_balance) if updated_group else 0.0,
-                },
-                "member": {
-                    "total_contributed": float(current_member.contributed_amount) if current_member else 0.0,
-                }
+        return {
+            "message": "Contribution successful",
+            "contribution": {
+                "amount": float(amount_to_contribute),
+                "user_id": str(current_user.id),
             },
-        )
+            "group": {
+                "current_balance": float(updated_group.current_balance) if updated_group else 0.0,
+                "target_balance": float(updated_group.target_balance) if updated_group else 0.0,
+            },
+            "member": {
+                "total_contributed": float(current_member.contributed_amount) if current_member else 0.0,
+            }
+        }
 
     async def remove_contribution(
         self,
@@ -569,20 +566,17 @@ class GroupService:
             },
         )
 
-        return JSONResponse(
-            status_code=status.HTTP_201_CREATED,
-            content={
-                "message": "Withdrawal successful",
-                "withdrawal": {
-                    "amount": float(amount_to_withdraw),
-                    "user_id": str(current_user.id),
-                },
-                "group": {
-                    "current_balance": float(updated_group.current_balance) if updated_group else 0.0,
-                    "target_balance": float(updated_group.target_balance) if updated_group else 0.0,
-                },
-                "member": {
-                    "total_contributed": float(current_member.contributed_amount) if current_member else 0.0,
-                }
+        return {
+            "message": "Withdrawal successful",
+            "withdrawal": {
+                "amount": float(amount_to_withdraw),
+                "user_id": str(current_user.id),
             },
-        )
+            "group": {
+                "current_balance": float(updated_group.current_balance) if updated_group else 0.0,
+                "target_balance": float(updated_group.target_balance) if updated_group else 0.0,
+            },
+            "member": {
+                "total_contributed": float(current_member.contributed_amount) if current_member else 0.0,
+            }
+        }
