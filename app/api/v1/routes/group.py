@@ -3,7 +3,7 @@
 import uuid
 import logging
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, status, BackgroundTasks, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, status, BackgroundTasks, Request, WebSocket, WebSocketDisconnect, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from redis.asyncio import Redis
@@ -300,7 +300,7 @@ async def remove_contribution(
 async def group_websocket(
     websocket: WebSocket,
     group_id: uuid.UUID,
-    token: str,
+    token: str = Query(..., description="JWT authentication token"),
     service: GroupService = Depends(get_group_service),
 ):
     """
@@ -347,17 +347,27 @@ async def group_websocket(
                     await websocket.send_json({"error": f"Invalid action '{action}'. Supported actions: contribute, withdraw"})
                     continue
                 
+                # Validate data field
+                if "data" not in data or not isinstance(data["data"], dict):
+                    await websocket.send_json({"error": "Missing or invalid 'data' field in message"})
+                    continue
+                
                 response = None
                 
                 if action == "contribute":
                     transaction_in = GroupDepositRequest(**data.get("data", {}))
                     
-                    response = await service.contribute_to_group(redis, group_id, transaction_in, user, None)
+                    # Create BackgroundTasks instance to enable email notifications
+                    background_tasks = BackgroundTasks()
+                    response = await service.contribute_to_group(redis, group_id, transaction_in, user, background_tasks)
                     response["type"] = "contribution"
                     
                 elif action == "withdraw":
                     transaction_in = GroupWithdrawRequest(**data.get("data", {}))
-                    response = await service.remove_contribution(redis, group_id, transaction_in, user, None)
+                    
+                    # Create BackgroundTasks instance to enable email notifications
+                    background_tasks = BackgroundTasks()
+                    response = await service.remove_contribution(redis, group_id, transaction_in, user, background_tasks)
                     response["type"] = "withdrawal"
                 
                 if response:

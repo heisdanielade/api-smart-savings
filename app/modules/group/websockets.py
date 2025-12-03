@@ -38,8 +38,7 @@ class ConnectionManager:
             try:
                 await connection.send_json(message)
             except Exception:
-                # Handle potential connection issues (e.g., client disconnected)
-                # The disconnect method will clean up the connection
+                logging.warning(f"Failed to send message to connection in group {group_id}: {str(e)}")
                 self.disconnect(connection, group_id)
 
 manager = ConnectionManager()
