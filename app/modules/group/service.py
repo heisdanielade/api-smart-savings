@@ -37,10 +37,13 @@ class GroupService:
         self.wallet_repo = wallet_repo
         self.notification_manager = notification_manager
 
-    async def create_group(self, group_in: GroupBase, current_user: User):
+    async def create_group(self, group_in: GroupUpdate, current_user: User):
         """
-        Create a new savings group. The user creating the group becomes its admin.
+        Create a new group.
         """
+        if not current_user.stag:
+            raise CustomException.bad_request("You must set your stag before creating a group.")
+
         return await self.group_repo.create_group(group_in, current_user.id)
         
     async def get_user_groups(self, current_user: User):
