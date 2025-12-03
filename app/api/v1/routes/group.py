@@ -357,17 +357,13 @@ async def group_websocket(
                 if action == "contribute":
                     transaction_in = GroupDepositRequest(**data.get("data", {}))
                     
-                    # Create BackgroundTasks instance to enable email notifications
-                    background_tasks = BackgroundTasks()
-                    response = await service.contribute_to_group(redis, group_id, transaction_in, user, background_tasks)
+                    response = await service.contribute_to_group(redis, group_id, transaction_in, user, None)
                     response["type"] = "contribution"
                     
                 elif action == "withdraw":
                     transaction_in = GroupWithdrawRequest(**data.get("data", {}))
                     
-                    # Create BackgroundTasks instance to enable email notifications
-                    background_tasks = BackgroundTasks()
-                    response = await service.remove_contribution(redis, group_id, transaction_in, user, background_tasks)
+                    response = await service.remove_contribution(redis, group_id, transaction_in, user, None)
                     response["type"] = "withdrawal"
                 
                 if response:
