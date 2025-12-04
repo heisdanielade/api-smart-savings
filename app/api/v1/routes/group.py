@@ -9,7 +9,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from redis.asyncio import Redis
 
-from app.core.middleware.rate_limiter import limiter, WebSocketRateLimiter
+from app.core.middleware.rate_limiter import limiter
 
 from app.api.dependencies import get_current_user, get_group_service, get_redis, get_current_user_ws
 from app.modules.group.websockets import manager
@@ -370,11 +370,7 @@ async def group_websocket(
             return
 
         await manager.connect(websocket, group_id)
-        
-        # Initialize rate limiter (4 requests per minute)
-        rate_limiter = WebSocketRateLimiter(redis, limit=4, window=60)
 
-        
         # Send auth success message
         try:
             await websocket.send_json({"status": "authenticated", "user_id": str(user.id)})

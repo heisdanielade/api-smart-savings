@@ -32,15 +32,22 @@ class ConnectionManager:
                 del self.active_connections[group_id]
 
     async def broadcast(self, message: dict, group_id: uuid.UUID):
-        """Broadcast a message to all connections in a group."""
+        """Broadcast a message to all connections in a group concurrently."""
         async with self.lock:
             connections = list(self.active_connections.get(group_id, []))
         
-        for connection in connections:
-            try:
-                await connection.send_json(message)
-            except Exception as e:
-                logging.warning(f"Failed to send message to connection in group {group_id}: {str(e)}")
-                self.disconnect(connection, group_id)
+        if not connections:
+            return
+
+        # Create tasks for all connections
+        tasks = [self._send_message(connection, message, group_id) for connection in connections]
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _send_message(self, connection: WebSocket, message: dict, group_id: uuid.UUID):
+        try:
+            await connection.send_json(message)
+        except Exception as e:
+            logging.warning(f"Failed to send message to connection in group {group_id}: {str(e)}")
+            self.disconnect(connection, group_id)
 
 manager = ConnectionManager()
