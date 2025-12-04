@@ -4,12 +4,12 @@ import uuid
 import logging
 import asyncio
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, status, BackgroundTasks, Request, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, Depends, status, BackgroundTasks, Request, WebSocket, WebSocketDisconnect
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from redis.asyncio import Redis
 
-from app.core.middleware.rate_limiter import limiter
+from app.core.middleware.rate_limiter import limiter, WebSocketRateLimiter
 
 from app.api.dependencies import get_current_user, get_group_service, get_redis, get_current_user_ws
 from app.modules.group.websockets import manager
@@ -339,13 +339,13 @@ async def group_websocket(
             return
             
         if data.get("action") != "authenticate":
-             await safe_close(code=status.WS_1008_POLICY_VIOLATION, reason="Authentication required")
-             return
+            await safe_close(code=status.WS_1008_POLICY_VIOLATION, reason="Authentication required")
+            return
              
         token = data.get("token")
         if not token:
-             await safe_close(code=status.WS_1008_POLICY_VIOLATION, reason="Missing token")
-             return
+            await safe_close(code=status.WS_1008_POLICY_VIOLATION, reason="Missing token")
+            return
 
         try:
             user = await get_current_user_ws(token, redis, service.user_repo)
@@ -370,6 +370,10 @@ async def group_websocket(
             return
 
         await manager.connect(websocket, group_id)
+        
+        # Initialize rate limiter (4 requests per minute)
+        rate_limiter = WebSocketRateLimiter(redis, limit=4, window=60)
+
         
         # Send auth success message
         try:
@@ -396,6 +400,12 @@ async def group_websocket(
                     # Validate data field
                     if "data" not in data or not isinstance(data["data"], dict):
                         await websocket.send_json({"error": "Missing or invalid 'data' field in message"})
+                        continue
+                    
+                    # Check rate limit
+                    rate_limit_key = f"rate_limit:ws:{user.id}:{action}"
+                    if not await rate_limiter.is_allowed(rate_limit_key):
+                        await websocket.send_json({"error": "Rate limit exceeded. Please try again later."})
                         continue
                     
                     response = None
@@ -447,5 +457,5 @@ async def group_websocket(
         # Catch-all for outer try block (auth phase)
         # Only log if it's not a disconnect
         if not isinstance(e, (WebSocketDisconnect, RuntimeError)):
-             logging.error(f"Unexpected error in WebSocket setup for group {group_id}: {str(e)}", exc_info=True)
+            logging.error(f"Unexpected error in WebSocket setup for group {group_id}: {str(e)}", exc_info=True)
         await safe_close(code=status.WS_1008_POLICY_VIOLATION)
