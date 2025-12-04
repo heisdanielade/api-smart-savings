@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from redis.asyncio import Redis
 
 from app.core.middleware.rate_limiter import limiter
+from app.core.utils.background_tasks import WebSocketBackgroundTasks
 
 from app.api.dependencies import get_current_user, get_group_service, get_redis, get_current_user_ws
 from app.modules.group.websockets import manager
@@ -370,6 +371,9 @@ async def group_websocket(
             return
 
         await manager.connect(websocket, group_id)
+        
+        # Initialize background tasks for async email handling
+        background_tasks = WebSocketBackgroundTasks()
 
         # Send auth success message
         try:
@@ -403,13 +407,13 @@ async def group_websocket(
                     if action == "contribute":
                         transaction_in = GroupDepositRequest(**data.get("data", {}))
                         
-                        response = await service.contribute_to_group(redis, group_id, transaction_in, user, None)
+                        response = await service.contribute_to_group(redis, group_id, transaction_in, user, background_tasks)
                         response["type"] = "contribution"
                         
                     elif action == "withdraw":
                         transaction_in = GroupWithdrawRequest(**data.get("data", {}))
                         
-                        response = await service.remove_contribution(redis, group_id, transaction_in, user, None)
+                        response = await service.remove_contribution(redis, group_id, transaction_in, user, background_tasks)
                         response["type"] = "withdrawal"
                     
                     if response:
