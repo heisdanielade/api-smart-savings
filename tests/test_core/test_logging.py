@@ -184,16 +184,21 @@ class TestGetRequestLogMessage:
 # ---------------------------
 # cleanup_old_logs tests
 # ---------------------------
+# ---------------------------
+# cleanup_old_logs tests
+# ---------------------------
 class TestCleanupOldLogs:
     @patch("app.core.middleware.logging.ENV", "production")
-    def test_cleanup_skips_in_production(self):
+    @pytest.mark.asyncio
+    async def test_cleanup_skips_in_production(self):
         with patch("app.core.middleware.logging.Path") as mock_path:
-            cleanup_old_logs()
+            await cleanup_old_logs()
             mock_path.assert_not_called()
 
     @patch("app.core.middleware.logging.ENV", "development")
     @patch("app.core.middleware.logging.LOG_RETENTION_DAYS", 7)
-    def test_cleanup_removes_old_entries(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_cleanup_removes_old_entries(self, tmp_path):
         log_dir = tmp_path / "logs"
         log_dir.mkdir()
         log_file = log_dir / "requests.log"
@@ -206,14 +211,15 @@ class TestCleanupOldLogs:
 
         log_file.write_text(f"{old_entry}\n{recent_entry}\n")
 
-        cleanup_old_logs(log_dir=log_dir, retention_days=7)
+        await cleanup_old_logs(log_dir=log_dir, retention_days=7)
 
         remaining_lines = log_file.read_text().splitlines()
         assert len(remaining_lines) == 1
         assert "Recent log" in remaining_lines[0]
 
     @patch("app.core.middleware.logging.ENV", "development")
-    def test_cleanup_handles_nonexistent_log_dir(self):
+    @pytest.mark.asyncio
+    async def test_cleanup_handles_nonexistent_log_dir(self):
         with patch("app.core.middleware.logging.Path") as mock_path_class:
             mock_instance = MagicMock()
             mock_log_dir = MagicMock()
@@ -221,5 +227,5 @@ class TestCleanupOldLogs:
             mock_instance.parent.parent.__truediv__.return_value = mock_log_dir
             mock_path_class.return_value = mock_instance
 
-            cleanup_old_logs()
+            await cleanup_old_logs()
             mock_log_dir.glob.assert_not_called()

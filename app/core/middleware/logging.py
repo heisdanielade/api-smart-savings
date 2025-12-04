@@ -1,5 +1,4 @@
-# app/core/middleware/logging.py
-
+import asyncio
 import datetime
 import json
 import logging
@@ -149,15 +148,20 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             if isinstance(exc, RateLimitExceeded):
                 status_code = 429
                 message = "Request rate-limited"
-                logger.warning(
-                    msg=message,
-                    extra={
-                        "method": request.method,
-                        "path": request.url.path,
-                        "status_code": status_code,
-                        "completed_in_ms": process_time,
-                        "ip_anonymized": masked_ip,
-                    },
+                
+                # Run logging in a separate thread to avoid blocking the event loop
+                await asyncio.get_running_loop().run_in_executor(
+                    None,
+                    lambda: logger.warning(
+                        msg=message,
+                        extra={
+                            "method": request.method,
+                            "path": request.url.path,
+                            "status_code": status_code,
+                            "completed_in_ms": process_time,
+                            "ip_anonymized": masked_ip,
+                        },
+                    )
                 )
             # Re-raise for FastAPI exception handlers
             raise
@@ -167,15 +171,20 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         app_metrics.set_latest_response_latency(process_time)
         
         message = get_request_log_message(response.status_code)
-        logger.info(
-            msg=message,
-            extra={
-                "method": request.method,
-                "path": request.url.path,
-                "status_code": response.status_code,
-                "completed_in_ms": process_time,
-                "ip_anonymized": masked_ip,
-            },
+        
+        # Run logging in a separate thread to avoid blocking the event loop
+        await asyncio.get_running_loop().run_in_executor(
+            None,
+            lambda: logger.info(
+                msg=message,
+                extra={
+                    "method": request.method,
+                    "path": request.url.path,
+                    "status_code": response.status_code,
+                    "completed_in_ms": process_time,
+                    "ip_anonymized": masked_ip,
+                },
+            )
         )
 
         return response
@@ -184,14 +193,17 @@ class LoggingMiddleware(BaseHTTPMiddleware):
 # ---------------------------
 # Log cleanup functions
 # ---------------------------
-def log_logs_cleanup(message: str = None):
-    cleanup_logger.info(
-        message or "Log cleanup executed", extra={"event": "log_cleanup"}
+async def log_logs_cleanup(message: str = None):
+    await asyncio.get_running_loop().run_in_executor(
+        None,
+        lambda: cleanup_logger.info(
+            message or "Log cleanup executed", extra={"event": "log_cleanup"}
+        )
     )
 
 
-def cleanup_old_logs(log_dir: Optional[Path] = None, retention_days: Optional[int] = None):
-    """Delete old logs based on retention days."""
+def _cleanup_old_logs_sync(log_dir: Optional[Path] = None, retention_days: Optional[int] = None):
+    """Synchronous implementation of log cleanup."""
     if ENV == "production":
         return
 
@@ -230,3 +242,11 @@ def cleanup_old_logs(log_dir: Optional[Path] = None, retention_days: Optional[in
                 cleanup_logger.error(
                     f"Error during log cleanup for {log_file.name}: {e}"
                 )
+
+
+async def cleanup_old_logs(log_dir: Optional[Path] = None, retention_days: Optional[int] = None):
+    """Delete old logs based on retention days (async wrapper)."""
+    await asyncio.get_running_loop().run_in_executor(
+        None,
+        lambda: _cleanup_old_logs_sync(log_dir, retention_days)
+    )
