@@ -398,12 +398,6 @@ async def group_websocket(
                         await websocket.send_json({"error": "Missing or invalid 'data' field in message"})
                         continue
                     
-                    # Check rate limit
-                    rate_limit_key = f"rate_limit:ws:{user.id}:{action}"
-                    if not await rate_limiter.is_allowed(rate_limit_key):
-                        await websocket.send_json({"error": "Rate limit exceeded. Please try again later."})
-                        continue
-                    
                     response = None
                     
                     if action == "contribute":
