@@ -3,6 +3,8 @@ from fastapi import WebSocket
 import uuid
 import asyncio
 
+import logging
+
 class ConnectionManager:
     """Manages WebSocket connections for group chat."""
     
@@ -13,7 +15,7 @@ class ConnectionManager:
 
     async def connect(self, websocket: WebSocket, group_id: uuid.UUID):
         """Accept and store a new WebSocket connection for a group."""
-        await websocket.accept()
+        # websocket.accept() is now handled in the route handler
         async with self.lock:
             if group_id not in self.active_connections:
                 self.active_connections[group_id] = []
@@ -37,7 +39,7 @@ class ConnectionManager:
         for connection in connections:
             try:
                 await connection.send_json(message)
-            except Exception:
+            except Exception as e:
                 logging.warning(f"Failed to send message to connection in group {group_id}: {str(e)}")
                 self.disconnect(connection, group_id)
 

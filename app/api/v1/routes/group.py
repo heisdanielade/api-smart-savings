@@ -2,6 +2,7 @@
 
 import uuid
 import logging
+import asyncio
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, status, BackgroundTasks, Request, WebSocket, WebSocketDisconnect, Query
 from fastapi.encoders import jsonable_encoder
@@ -300,100 +301,151 @@ async def remove_contribution(
 async def group_websocket(
     websocket: WebSocket,
     group_id: uuid.UUID,
-    token: str = Query(..., description="JWT authentication token"),
     service: GroupService = Depends(get_group_service),
 ):
     """
     WebSocket endpoint for real-time group chat and transactions.
+    Authentication is handled via the first message: {"action": "authenticate", "token": "JWT_TOKEN"}
     """
+    await websocket.accept()
+    
     # Get Redis from WebSocket app state
     redis = websocket.app.state.redis
+    user = None
     
-    try:
-        user = await get_current_user_ws(token, redis, service.user_repo)
-    except Exception as e:
-        logging.error(f"WebSocket authentication failed for group {group_id}: {str(e)}", exc_info=True)
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        return
+    # Helper to safely close websocket
+    async def safe_close(code: int, reason: str = ""):
+        try:
+            await websocket.close(code=code, reason=reason)
+        except RuntimeError:
+            # WebSocket might be already closed or in a state where it can't be closed
+            pass
+        except Exception as e:
+            logging.warning(f"Error closing websocket: {e}")
 
-    # Verify user is a member of the group
     try:
-        members = await service.group_repo.get_group_members(group_id)
-        is_member = any(str(member.user_id) == str(user.id) for member in members)
-        
-        if not is_member:
-            logging.warning(f"User {user.id} attempted to connect to group {group_id} without membership")
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        # 1. Authentication Handshake
+        try:
+            # Wait for authentication message with a timeout
+            data = await asyncio.wait_for(websocket.receive_json(), timeout=10.0)
+        except asyncio.TimeoutError:
+            await safe_close(code=status.WS_1008_POLICY_VIOLATION, reason="Authentication timeout")
             return
-    except Exception as e:
-        logging.error(f"Failed to verify group membership for user {user.id} in group {group_id}: {str(e)}", exc_info=True)
-        await websocket.close(code=status.WS_1003_UNSUPPORTED_DATA)
-        return
-
-    await manager.connect(websocket, group_id)
-    
-    try:
-        while True:
-            data = await websocket.receive_json()
-            action = data.get("action")
+        except WebSocketDisconnect:
+            # Client disconnected during handshake
+            return
+        except Exception:
+            await safe_close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid authentication message")
+            return
             
-            try:
-                # Validate action field
-                if not action:
-                    await websocket.send_json({"error": "Missing 'action' field in message"})
-                    continue
+        if data.get("action") != "authenticate":
+             await safe_close(code=status.WS_1008_POLICY_VIOLATION, reason="Authentication required")
+             return
+             
+        token = data.get("token")
+        if not token:
+             await safe_close(code=status.WS_1008_POLICY_VIOLATION, reason="Missing token")
+             return
+
+        try:
+            user = await get_current_user_ws(token, redis, service.user_repo)
+        except Exception as e:
+            # Log generically to avoid leaking token
+            logging.error(f"WebSocket authentication failed for group {group_id}")
+            await safe_close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+
+        # Verify user is a member of the group
+        try:
+            members = await service.group_repo.get_group_members(group_id)
+            is_member = any(str(member.user_id) == str(user.id) for member in members)
+            
+            if not is_member:
+                logging.warning(f"User {user.id} attempted to connect to group {group_id} without membership")
+                await safe_close(code=status.WS_1008_POLICY_VIOLATION)
+                return
+        except Exception as e:
+            logging.error(f"Failed to verify group membership for user {user.id} in group {group_id}: {str(e)}", exc_info=True)
+            await safe_close(code=status.WS_1003_UNSUPPORTED_DATA)
+            return
+
+        await manager.connect(websocket, group_id)
+        
+        # Send auth success message
+        try:
+            await websocket.send_json({"status": "authenticated", "user_id": str(user.id)})
+        except Exception:
+            manager.disconnect(websocket, group_id)
+            return
+        
+        try:
+            while True:
+                data = await websocket.receive_json()
+                action = data.get("action")
                 
-                if action not in ["contribute", "withdraw"]:
-                    await websocket.send_json({"error": f"Invalid action '{action}'. Supported actions: contribute, withdraw"})
-                    continue
-                
-                # Validate data field
-                if "data" not in data or not isinstance(data["data"], dict):
-                    await websocket.send_json({"error": "Missing or invalid 'data' field in message"})
-                    continue
-                
-                response = None
-                
-                if action == "contribute":
-                    transaction_in = GroupDepositRequest(**data.get("data", {}))
+                try:
+                    # Validate action field
+                    if not action:
+                        await websocket.send_json({"error": "Missing 'action' field in message"})
+                        continue
                     
-                    response = await service.contribute_to_group(redis, group_id, transaction_in, user, None)
-                    response["type"] = "contribution"
+                    if action not in ["contribute", "withdraw"]:
+                        await websocket.send_json({"error": f"Invalid action '{action}'. Supported actions: contribute, withdraw"})
+                        continue
                     
-                elif action == "withdraw":
-                    transaction_in = GroupWithdrawRequest(**data.get("data", {}))
+                    # Validate data field
+                    if "data" not in data or not isinstance(data["data"], dict):
+                        await websocket.send_json({"error": "Missing or invalid 'data' field in message"})
+                        continue
                     
-                    response = await service.remove_contribution(redis, group_id, transaction_in, user, None)
-                    response["type"] = "withdrawal"
-                
-                if response:
-                    # Add user info to response for chat display
-                    response["user"] = {
-                        "id": str(user.id),
-                        "full_name": user.full_name,
-                        "email": user.email,
-                        "stag": user.stag
-                    }
-                    response["timestamp"] = datetime.now(timezone.utc).isoformat()
+                    response = None
                     
-                    await manager.broadcast(response, group_id)
+                    if action == "contribute":
+                        transaction_in = GroupDepositRequest(**data.get("data", {}))
+                        
+                        response = await service.contribute_to_group(redis, group_id, transaction_in, user, None)
+                        response["type"] = "contribution"
+                        
+                    elif action == "withdraw":
+                        transaction_in = GroupWithdrawRequest(**data.get("data", {}))
+                        
+                        response = await service.remove_contribution(redis, group_id, transaction_in, user, None)
+                        response["type"] = "withdrawal"
                     
-            except Exception as e:
-                logging.error(f"Error processing WebSocket action for group {group_id}: {str(e)}", exc_info=True)
-                # Send user-friendly error message without exposing implementation details
-                error_message = "Failed to process transaction. Please try again."
-                
-                # Only expose specific error types that are safe
-                from app.core.utils.exceptions import CustomException
-                if isinstance(e, CustomException):
-                    error_message = e.detail if hasattr(e, 'detail') else str(e)
-                
-                await websocket.send_json({"error": error_message})
-                
-    except WebSocketDisconnect:
-        # Expected: client disconnected normally
-        manager.disconnect(websocket, group_id)
+                    if response:
+                        # Add user info to response for chat display
+                        response["user"] = {
+                            "id": str(user.id),
+                            "full_name": user.full_name,
+                            "email": user.email,
+                            "stag": user.stag
+                        }
+                        response["timestamp"] = datetime.now(timezone.utc).isoformat()
+                        
+                        await manager.broadcast(response, group_id)
+                        
+                except Exception as e:
+                    logging.error(f"Error processing WebSocket action for group {group_id}: {str(e)}", exc_info=True)
+                    # Send user-friendly error message without exposing implementation details
+                    error_message = "Failed to process transaction. Please try again."
+                    
+                    # Only expose specific error types that are safe
+                    from app.core.utils.exceptions import CustomException
+                    if isinstance(e, CustomException):
+                        error_message = e.detail if hasattr(e, 'detail') else str(e)
+                    
+                    await websocket.send_json({"error": error_message})
+                    
+        except WebSocketDisconnect:
+            # Expected: client disconnected normally
+            manager.disconnect(websocket, group_id)
+        except Exception as e:
+            # Unexpected: log for debugging and monitoring
+            logging.error(f"Unexpected error in WebSocket for group {group_id}: {str(e)}", exc_info=True)
+            manager.disconnect(websocket, group_id)
     except Exception as e:
-        # Unexpected: log for debugging and monitoring
-        logging.error(f"Unexpected error in WebSocket for group {group_id}: {str(e)}", exc_info=True)
-        manager.disconnect(websocket, group_id)
+        # Catch-all for outer try block (auth phase)
+        # Only log if it's not a disconnect
+        if not isinstance(e, (WebSocketDisconnect, RuntimeError)):
+             logging.error(f"Unexpected error in WebSocket setup for group {group_id}: {str(e)}", exc_info=True)
+        await safe_close(code=status.WS_1008_POLICY_VIOLATION)
