@@ -449,6 +449,14 @@ async def group_websocket(
         except WebSocketDisconnect:
             # Expected: client disconnected normally
             manager.disconnect(websocket, group_id)
+        except RuntimeError as e:
+            # Handle "WebSocket is not connected" error
+            if "WebSocket is not connected" in str(e):
+                manager.disconnect(websocket, group_id)
+                return
+            # Log other runtime errors
+            logging.error(f"RuntimeError in WebSocket for group {group_id}: {str(e)}", exc_info=True)
+            manager.disconnect(websocket, group_id)
         except Exception as e:
             # Unexpected: log for debugging and monitoring
             logging.error(f"Unexpected error in WebSocket for group {group_id}: {str(e)}", exc_info=True)
