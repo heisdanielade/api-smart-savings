@@ -20,6 +20,7 @@ class GroupBase(SQLModel):
     currency: Currency = Field(
         sa_column=Column(Currency.sa_enum(), default=Currency.EUR, nullable=False)
     )
+    is_solo: bool = Field(default=False)
 
 
 class Group(GroupBase, table=True):

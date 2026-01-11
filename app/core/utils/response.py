@@ -121,6 +121,7 @@ class GroupData(BaseModel):
     current_balance: Decimal
     require_admin_approval_for_funds_removal: bool
     currency: Currency
+    is_solo: bool
     created_at: datetime
     updated_at: datetime
     members: List[GroupMemberData] = []
@@ -140,6 +141,7 @@ class GroupSummaryData(BaseModel):
     target_balance: Decimal
     current_balance: Decimal
     currency: Currency
+    is_solo: bool
     updated_at: datetime
     
     model_config = ConfigDict(from_attributes=True)

@@ -150,6 +150,9 @@ class GroupService:
         if not await self.group_repo.is_user_admin(group_id, current_user.id):
             raise CustomException.forbidden(detail="Only admin can add members")
 
+        if group.is_solo:
+            raise CustomException.bad_request(detail="Cannot add members to a solo group")
+
         members = await self.group_repo.get_group_members(group_id)
         
         # Resolve user_id from stag
@@ -281,7 +284,7 @@ class GroupService:
         if not any(str(m.user_id) == str(current_user.id) for m in members):
             raise CustomException.forbidden(detail="Not a member of this group")
 
-        if len(members) < 2:
+        if not group.is_solo and len(members) < 2:
             raise CustomException.bad_request(detail="At least 2 members are required before a group can accept contributions."
             )
 
