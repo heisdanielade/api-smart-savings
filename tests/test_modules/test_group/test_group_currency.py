@@ -50,12 +50,20 @@ async def test_create_group_with_currency(group_service, mock_group_repo):
 
 @pytest.mark.asyncio
 async def test_update_group_currency(group_service, mock_group_repo):
+    from app.modules.group.models import Group
+    
     user = User(id=uuid.uuid4(), email="test@example.com")
     group_id = uuid.uuid4()
     group_update = GroupUpdate(currency=Currency.GBP)
     
-    # Mock existing group and admin check
-    mock_group_repo.get_group_by_id.return_value = True
+    # Mock existing group and admin check with proper Group object
+    mock_group_repo.get_group_by_id.return_value = Group(
+        id=group_id,
+        name="Test Group",
+        target_balance=1000,
+        is_solo=False,
+        currency=Currency.EUR
+    )
     mock_group_repo.is_user_admin.return_value = True
     
     await group_service.update_group_settings(group_id, group_update, user)
