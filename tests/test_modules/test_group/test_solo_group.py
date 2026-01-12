@@ -144,7 +144,6 @@ async def test_contribute_to_normal_group_with_one_member_fails(group_service, m
 @pytest.mark.asyncio
 async def test_solo_group_auto_override_admin_approval_on_create(group_service, mock_group_repo, current_user):
     """Test that solo groups automatically override require_admin_approval_for_funds_removal to False on creation"""
-    from app.modules.group.models import Group
     
     # Create solo group with admin approval set to True
     group_in = Group(
