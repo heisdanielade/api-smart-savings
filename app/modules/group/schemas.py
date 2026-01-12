@@ -14,7 +14,7 @@ class GroupUpdate(BaseModel):
     
     NOTE: The following fields have constraints:
     - `is_solo`: Cannot be changed after group creation. Attempting to modify this 
-                 field will result in a validation error.
+                 field will result in an error.
     - `require_admin_approval_for_funds_removal`: For solo groups (is_solo=True), 
                  this will be automatically overridden to False, regardless of the 
                  value provided.
