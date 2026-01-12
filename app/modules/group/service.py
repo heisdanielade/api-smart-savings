@@ -76,7 +76,7 @@ class GroupService:
             raise CustomException.forbidden(detail="Only admin can update the group")
         
         # Get the update data
-        update_data = group_in.dict(exclude_unset=True, exclude_none=True)
+        update_data = group_in.model_dump(exclude_unset=True, exclude_none=True)
         
         # Enforce immutability: is_solo cannot be changed after creation
         if 'is_solo' in update_data and update_data['is_solo'] != group.is_solo:
