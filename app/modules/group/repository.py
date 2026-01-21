@@ -60,6 +60,25 @@ class GroupRepository:
         )
         return result.scalar_one_or_none() is not None
 
+    async def is_user_member(self, group_id: uuid.UUID, user_id: uuid.UUID) -> bool:
+        """
+        Check if a user is a member of the group.
+
+        Args:
+            group_id (uuid.UUID): The ID of the group.
+            user_id (uuid.UUID): The ID of the user.
+
+        Returns:
+            bool: True if the user is a member, False otherwise.
+        """
+        result = await self.session.execute(
+            select(GroupMember).where(
+                GroupMember.group_id == group_id,
+                GroupMember.user_id == user_id
+            )
+        )
+        return result.scalar_one_or_none() is not None
+
     async def get_group_by_id(self, group_id: uuid.UUID) -> Optional[Group]:
         """
         Retrieves a group by its ID.
@@ -293,7 +312,25 @@ class GroupRepository:
         result = await self.session.execute(
             select(Group)
             .join(GroupMember, Group.id == GroupMember.group_id)
-            .where(GroupMember.user_id == user_id)
+            .where(GroupMember.user_id == user_id and not Group.is_solo)
+            
+        )
+        return result.scalars().all()
+    
+    async def get_user_goals(self, user_id: uuid.UUID) -> List[Group]:
+        """
+        Retrieves all goals that a user has.
+
+        Args:
+            user_id (uuid.UUID): The ID of the user.
+
+        Returns:
+            List[Group]: A list of goal objects.
+        """
+        result = await self.session.execute(
+            select(Group)
+            .join(GroupMember, Group.id == GroupMember.group_id)
+            .where(GroupMember.user_id == user_id and Group.is_solo)
         )
         return result.scalars().all()
 
