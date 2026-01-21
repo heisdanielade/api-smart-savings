@@ -248,5 +248,19 @@ async def get_group_repo(db: AsyncSession = Depends(get_session)):
     """Dependency factory for group repository."""
     return GroupRepository(db)
 
+async def get_ims_repo(db: AsyncSession = Depends(get_session)):
+    """Dependency factory for IMS repository."""
+    from app.modules.ims.repository import IMSRepository
+    return IMSRepository(db)
 
 
+# ========================
+# IMS SERVICE
+# ========================
+async def get_ims_service(db: AsyncSession = Depends(get_session)):
+    """Dependency factory for IMS service."""
+    from app.modules.ims.repository import IMSRepository
+    from app.modules.ims.service import IMSService
+    ims_repo = IMSRepository(db)
+    group_repo = GroupRepository(db)
+    return IMSService(ims_repo, group_repo)
