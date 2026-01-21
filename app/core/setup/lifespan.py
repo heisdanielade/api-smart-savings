@@ -20,7 +20,7 @@ async def run_lifespan(app: FastAPI):
     """
     from app.infra.database.init_db import init_test_accounts
     from app.core.middleware.logging import cleanup_old_logs
-    from app.core.tasks.cron_jobs import anonymize_soft_deleted_users
+    from app.core.tasks.cron_jobs import anonymize_soft_deleted_users, process_scheduled_transactions
     from app.infra.database.session import set_utc_timezone
     from app.core.setup.redis import redis_client
 
@@ -52,12 +52,27 @@ async def run_lifespan(app: FastAPI):
         max_instances=1,
         coalesce=True,
         replace_existing=True,
+    )   
+    
+    # --- Scheduled transaction processor (runs every minute) ---
+    async def run_scheduled_tx_job():
+        await process_scheduled_transactions()
+    scheduler.add_job(
+        run_scheduled_tx_job,
+        trigger="interval",
+        hours=24,
+        id="process_scheduled_transactions",
+        max_instances=1,
+        coalesce=True,
+        replace_existing=True,
     )
+    
     scheduler.start()
     print(
         f"[STARTUP INFO] (i) User anonymization cron job scheduled every "
         f"{settings.HARD_DELETE_CRON_INTERVAL_HOURS} hour(s)\n", flush=True
     )
+    print("[STARTUP INFO] (i) Scheduled transaction processor running every minute\n", flush=True)
 
     # --- Yield control to app ---
     yield
