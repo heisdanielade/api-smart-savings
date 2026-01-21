@@ -10,6 +10,8 @@ services:
       - redis
     volumes: 
       - .:/app
+    networks:
+      - smartsave-net
   db:
     image: postgres:17
     container_name: savings-db
@@ -20,7 +22,8 @@ services:
       - "5436:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-
+    networks:
+      - smartsave-net
   redis:
     image: redis:7
     container_name: savings-redis
@@ -28,6 +31,12 @@ services:
       - "6379:6379"
     command: ["redis-server", "--appendonly", "no"]
     restart: always
+    networks:
+      - smartsave-net
 
 volumes:
   pgdata:
+
+networks:
+  smartsave-net:
+    external: true

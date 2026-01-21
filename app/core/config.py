@@ -65,6 +65,8 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: Optional[str] = None
     SMTP_TLS: bool = True
     SMTP_SSL: bool = False
+    # NLP
+    NLP_SERVICE_URL: Optional[str] = None
     # SCHEDULE
     HARD_DELETE_RETENTION_DAYS: Optional[int] = 14
     HARD_DELETE_CRON_INTERVAL_HOURS: Optional[int] = 24
