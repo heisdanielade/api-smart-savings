@@ -41,6 +41,7 @@ class GroupRole(str, Enum):
 
 class TransactionStatus(str, Enum):
     """Enumeration of transaction statuses."""
+    ACTIVE = "ACTIVE"
     PENDING = "PENDING"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
@@ -110,3 +111,49 @@ class NotificationType(str, Enum):
     def sa_enum(cls):
         from sqlalchemy import Enum as SAEnum
         return SAEnum(cls, name="notification_type_enum")
+
+
+class TransactionFrequency(str, Enum):
+    """Frequency options for scheduled transactions."""
+    ONCE = "ONCE"
+    DAILY = "DAILY"
+    WEEKLY = "WEEKLY"
+    MONTHLY = "MONTHLY"
+
+    @classmethod
+    def sa_enum(cls):
+        from sqlalchemy import Enum as SAEnum
+        return SAEnum(cls, name="transaction_frequency_enum")
+
+
+class SavingsIntent(str, Enum):
+    """Intent type for savings transactions."""
+    PERSONAL_SAVING = "personal_saving"
+    GROUP_SAVING = "group_saving"
+
+    @classmethod
+    def sa_enum(cls):
+        from sqlalchemy import Enum as SAEnum
+        return SAEnum(cls, name="savings_intent_enum")
+
+
+class DestinationType(str, Enum):
+    """Transaction destination type (savings only)."""
+    GOAL = "GOAL"
+    GROUP = "GROUP"
+
+    @classmethod
+    def sa_enum(cls):
+        from sqlalchemy import Enum as SAEnum
+        return SAEnum(cls, name="destination_type_enum")
+
+
+class ValidationStatus(str, Enum):
+    """Status of interpretation validation."""
+    VALID = "VALID"
+    CLARIFICATION_REQUIRED = "CLARIFICATION_REQUIRED"
+
+    @classmethod
+    def sa_enum(cls):
+        from sqlalchemy import Enum as SAEnum
+        return SAEnum(cls, name="validation_status_enum")

@@ -77,6 +77,7 @@ class User(UserBase, table=True):
     
     # IMS relationships
     ims_actions: list["IMSAction"] = Relationship(back_populates="user")
+    scheduled_transactions: list["ScheduledTransaction"] = Relationship(back_populates="user")
 
     def __setattr__(self, name, value) -> None:
         """
@@ -98,6 +99,6 @@ class User(UserBase, table=True):
 from app.modules.gdpr.models import GDPRRequest
 from app.modules.wallet.models import Wallet, Transaction
 from app.modules.group.models import GroupMember
-from app.modules.ims.models import IMSAction
+from app.modules.ims.models import IMSAction, ScheduledTransaction
 
 User.model_rebuild()
