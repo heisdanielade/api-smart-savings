@@ -16,6 +16,7 @@ from app.modules.wallet.models import Transaction, Wallet, ExchangeRate
 from app.modules.group.models import Group, GroupMember, GroupTransactionMessage
 from app.modules.ims.models import IMSAction
 from app.modules.ims.models import ScheduledTransaction
+from app.modules.gdpr.models import UserConsentAudit
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config

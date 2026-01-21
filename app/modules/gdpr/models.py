@@ -9,7 +9,7 @@ from sqlalchemy import Column, DateTime, ForeignKey
 from sqlmodel import Field, SQLModel, Relationship
 from pydantic import ConfigDict
 
-from app.modules.shared.enums import GDPRRequestStatus, GDPRRequestType
+from app.modules.shared.enums import GDPRRequestStatus, GDPRRequestType, ConsentType
 
 class GDPRRequest(SQLModel, table=True):
     """
@@ -65,6 +65,37 @@ class GDPRRequest(SQLModel, table=True):
         validate_assignment=True
     )
 
+
+class UserConsentAudit(SQLModel, table=True):
+    """
+    Audit log for user consents (e.g. AI features).
+    """
+    __tablename__ = "user_consent_audit"
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    user_id: UUID = Field(foreign_key="app_user.id", nullable=False)
+    
+    consent_type: ConsentType = Field(
+        sa_column=Column(ConsentType.sa_enum(), nullable=False)
+    )
+    version: str = Field(nullable=False)
+    source_ip: str = Field(nullable=False)
+    user_agent: str = Field(nullable=False)
+    
+    granted_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), nullable=False, server_default="now()")
+    )
+    revoked_at: Optional[datetime] = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
+
+    user: "User" = Relationship()
+
+    model_config = ConfigDict(validate_assignment=True)
+
+
 from app.modules.user.models import User
 
 GDPRRequest.model_rebuild()
+UserConsentAudit.model_rebuild()
