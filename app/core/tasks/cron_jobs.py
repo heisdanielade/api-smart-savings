@@ -231,6 +231,8 @@ def _advance_schedule(tx: ScheduledTransaction):
         for d in tx.projection_log:
             try:
                 dt = datetime.fromisoformat(d.replace("Z", "+00:00"))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
                 if dt > now:
                     future_dates.append(dt)
             except ValueError:
