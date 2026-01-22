@@ -286,8 +286,12 @@ async def test_confirm_transaction_once_executes_immediately(ims_service, mock_i
 
     # We need to mock the imports inside confirm_transaction.
     # Since they are local imports, we patch the modules where they come FROM.
+    # We ALSO need to patch redis.asyncio.Redis.from_url because importing cron_jobs
+    # triggers app.core.setup.redis import which tries to connect to redis using settings.REDIS_URL
+    # which might be invalid/missing in CI env if not mocked.
     
-    with patch("app.core.tasks.cron_jobs._process_single_transaction", new_callable=AsyncMock) as mock_process, \
+    with patch("redis.asyncio.Redis.from_url") as mock_redis_conn, \
+         patch("app.core.tasks.cron_jobs._process_single_transaction", new_callable=AsyncMock) as mock_process, \
          patch("app.modules.wallet.repository.WalletRepository") as mock_wallet_repo_cls, \
          patch("app.modules.user.repository.UserRepository") as mock_user_repo_cls, \
          patch("app.modules.notifications.email.service.EmailNotificationService") as mock_email_service_cls:
