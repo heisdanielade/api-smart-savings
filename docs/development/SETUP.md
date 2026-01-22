@@ -55,7 +55,10 @@ make build
 Stop the app using Docker:
 
 ```bash
-make down
+docker network create smartsave-net # Create docker network
+make build      # Start app using Docker
+make down       # Stop app
+make tests      # Run tests
 ```
 
 More helpful commands are provided in `Makefile` in the project's root directory.

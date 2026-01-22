@@ -67,6 +67,19 @@ async def get_user_groups(
     groups = await service.get_user_groups(current_user)
     return UserGroupsResponse(data=jsonable_encoder(groups))
 
+@router.get("/solo", response_model=UserGroupsResponse, status_code=status.HTTP_200_OK)
+@limiter.limit("20/minute")
+async def get_user_goals(
+    request: Request,
+    service: GroupService = Depends(get_group_service),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get all groups the current user is a member of.
+    """
+    groups = await service.get_user_goals(current_user)
+    return UserGroupsResponse(data=jsonable_encoder(groups))
+
 
 @router.get("/{group_id}", response_model=GroupResponse, status_code=status.HTTP_200_OK)
 @limiter.limit("20/minute")

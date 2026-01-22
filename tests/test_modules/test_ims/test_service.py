@@ -222,3 +222,89 @@ async def test_cancel_transaction_not_owner(ims_service, mock_ims_repo, test_use
 
     with pytest.raises(ValueError, match="You do not own this scheduled transaction"):
         await ims_service.cancel_scheduled_transaction(tx_id, test_user)
+
+
+def test_create_draft_goal_with_group_id_retains_goal():
+    """
+    Test that if interpretation has GOAL intent and a group_id (e.g. hallucination or context),
+    it correctly stays as GOAL and is NOT forced to GROUP.
+    """
+    group_id = uuid.uuid4()
+    interpretation = InterpretationData(
+        intent=SavingsIntent.PERSONAL_SAVING, # Checks validation
+        amount=Decimal("100.00"),
+        currency=Currency.EUR,
+        frequency=TransactionFrequency.ONCE,
+        destination_type=DestinationType.GOAL, # Explicitly GOAL
+        group_id=group_id, # Spurious group ID
+        goal_name="Bike",
+        raw_prompt="Save 100 for a bike"
+    )
+    
+    # We pass user_groups to populate names if needed, but not critical for this test logic
+    user_groups = {str(group_id): "Some Group"}
+    
+    draft = ProjectionService.create_draft(interpretation, user_groups=user_groups)
+    
+    assert draft.destination_type == DestinationType.GOAL
+    assert draft.group_name is not None # It might resolve the name, which is fine
+    assert draft.goal_name == "Bike"
+
+
+@pytest.mark.asyncio
+async def test_confirm_transaction_once_executes_immediately(ims_service, mock_ims_repo, mock_group_repo, test_user):
+    """
+    Test that confirming a valid ONCE transaction triggers immediate execution logic.
+    """
+    # Setup request with ONCE frequency
+    req = ConfirmTransactionRequest(
+        amount=Decimal("100.00"),
+        currency=Currency.EUR,
+        frequency=TransactionFrequency.ONCE,
+        start_date=datetime.now(timezone.utc),
+        destination_type=DestinationType.GOAL,
+        goal_name="Test Goal"
+    )
+    
+    # Mock goals lookup
+    mock_goal = MagicMock()
+    mock_goal.id = uuid.uuid4()
+    mock_goal.name = "Test Goal"
+    mock_group_repo.get_user_goals = AsyncMock(return_value=[mock_goal])
+    
+    # Mock create_scheduled_transaction to return a mock tx
+    created_tx = MagicMock(spec=ScheduledTransaction)
+    created_tx.id = uuid.uuid4()
+    created_tx.frequency = TransactionFrequency.ONCE
+    created_tx.user_id = test_user.id
+    created_tx.next_run_at = req.start_date
+    created_tx.amount = req.amount
+    
+    mock_ims_repo.create_scheduled_transaction.return_value = created_tx
+    # Mock the DB session on the repo since it's used for instantiating repos
+    mock_ims_repo.db = AsyncMock()
+
+    # We need to mock the imports inside confirm_transaction.
+    # Since they are local imports, we patch the modules where they come FROM.
+    
+    with patch("app.core.tasks.cron_jobs._process_single_transaction", new_callable=AsyncMock) as mock_process, \
+         patch("app.modules.wallet.repository.WalletRepository") as mock_wallet_repo_cls, \
+         patch("app.modules.user.repository.UserRepository") as mock_user_repo_cls, \
+         patch("app.modules.notifications.email.service.EmailNotificationService") as mock_email_service_cls:
+        
+        await ims_service.confirm_transaction(req, test_user)
+        
+        # Verify db.commit was called (at least once for the commit in execution if mocked correctly)
+        # Note: repo.create_scheduled_transaction is mocked to return immediately, so it doesn't use db.
+        # But _process_single_transaction execution in service calls repo.db.commit()
+        assert mock_ims_repo.db.commit.called
+        
+        # Verify execution was called
+        mock_process.assert_called_once()
+        call_args = mock_process.call_args
+        assert call_args[0][1] == created_tx # 2nd arg is tx
+        
+        # Verify repos were instantiated with db session
+        mock_wallet_repo_cls.assert_called_with(mock_ims_repo.db)
+        mock_user_repo_cls.assert_called_with(mock_ims_repo.db)
+

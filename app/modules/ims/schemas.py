@@ -39,6 +39,7 @@ class InterpretationData(BaseModel):
     end_date: Optional[datetime] = None
     goal_name: Optional[str] = None
     goal_id: Optional[UUID] = None
+    group_name: Optional[str] = None
     group_id: Optional[UUID] = None
     destination_type: DestinationType = DestinationType.GOAL
     raw_prompt: str

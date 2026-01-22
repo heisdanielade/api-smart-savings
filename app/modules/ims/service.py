@@ -140,17 +140,16 @@ class ProjectionService:
         destination_type = interpretation.destination_type
         group_id = interpretation.group_id
         goal_id = interpretation.goal_id
-
-        # Auto-correct destination type if group_id is present
-        if group_id and destination_type != DestinationType.GROUP:
-            destination_type = DestinationType.GROUP
-
+             
         # Resolve names from context if available
-        group_name = None
+        group_name = interpretation.group_name
         if group_id and user_groups:
             # Try exact match or string match
-            group_name = user_groups.get(str(group_id))
-
+            # Prefer contextual name if ID match found
+            resolved_name = user_groups.get(str(group_id))
+            if resolved_name:
+                group_name = resolved_name
+            
         goal_name = interpretation.goal_name
         if goal_id and not goal_name and user_goals:
             goal_name = user_goals.get(str(goal_id))
@@ -230,7 +229,9 @@ class ProjectionService:
 
     @staticmethod
     def generate_cron_expression(
-        frequency: TransactionFrequency, day_of_week: Optional[int] = None
+        frequency: TransactionFrequency, 
+        day_of_week: Optional[int] = None,
+        day_of_month: Optional[int] = 1
     ) -> str:
         """
         Generate a cron expression from frequency settings.
@@ -238,7 +239,8 @@ class ProjectionService:
         Args:
             frequency: Transaction frequency
             day_of_week: Day of week for weekly frequency (0=Monday)
-
+            day_of_month: Day of month for monthly frequency (1-31)
+            
         Returns:
             Cron expression string
         """
@@ -254,8 +256,10 @@ class ProjectionService:
             return f"0 0 * * {cron_dow}"
 
         if frequency == TransactionFrequency.MONTHLY:
-            return "0 0 1 * *"  # First day of each month at midnight
-
+            # Use provided day of month, default to 1
+            dom = day_of_month if day_of_month and 1 <= day_of_month <= 31 else 1
+            return f"0 0 {dom} * *"
+        
         return ""
 
 
@@ -506,6 +510,7 @@ class IMSService:
         cron_expression = ProjectionService.generate_cron_expression(
             request.frequency,
             day_int,
+            day_of_month=request.start_date.day if request.start_date else 1
         )
 
         # Create scheduled transaction
@@ -532,6 +537,38 @@ class IMSService:
             f"Created scheduled transaction {created_tx.id} for user {current_user.id}, "
             f"next run at {created_tx.next_run_at}"
         )
+
+        # Execute immediately if frequency is ONCE
+        if created_tx.frequency == TransactionFrequency.ONCE:
+            try:
+                # Import here to avoid circular dependencies
+                from app.core.tasks.cron_jobs import _process_single_transaction
+                from app.modules.wallet.repository import WalletRepository
+                from app.modules.user.repository import UserRepository
+                from app.modules.notifications.email.service import EmailNotificationService
+
+                logger.info(f"Executing ONCE transaction {created_tx.id} immediately")
+                
+                wallet_repo = WalletRepository(self.ims_repo.db)
+                user_repo = UserRepository(self.ims_repo.db)
+                notification_manager = EmailNotificationService()
+
+                await _process_single_transaction(
+                    self.ims_repo.db,
+                    created_tx,
+                    self.group_repo,
+                    wallet_repo,
+                    user_repo,
+                    notification_manager
+                )
+                
+                # Commit the changes made during execution
+                await self.ims_repo.db.commit()
+                await self.ims_repo.db.refresh(created_tx)
+                
+            except Exception as e:
+                logger.error(f"Failed to execute ONCE transaction immediately: {e}")
+                pass
 
         return created_tx
 

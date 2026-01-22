@@ -48,6 +48,12 @@ class GroupService:
         """
         return await self.group_repo.get_user_groups(current_user.id)
 
+    async def get_user_goals(self, current_user: User):
+        """
+        Get all goals of the current user.
+        """
+        return await self.group_repo.get_user_goals(current_user.id)
+
     async def get_group(self, group_id: uuid.UUID, current_user: User):
         """
         Get detailed information about a specific group. Only members can view group details.
