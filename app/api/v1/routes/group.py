@@ -405,16 +405,44 @@ async def group_websocket(
                     response = None
                     
                     if action == "contribute":
-                        transaction_in = GroupDepositRequest(**data.get("data", {}))
-                        
-                        response = await service.contribute_to_group(redis, group_id, transaction_in, user, background_tasks)
-                        response["type"] = "contribution"
+                        # Acquire lock to ensure atomic processing and broadcasting order
+                        group_lock = await manager.get_group_lock(group_id)
+                        async with group_lock:
+                            transaction_in = GroupDepositRequest(**data.get("data", {}))
+                            
+                            response = await service.contribute_to_group(redis, group_id, transaction_in, user, background_tasks)
+                            response["type"] = "contribution"
+                            
+                            if response:
+                                # Add user info to response for chat display
+                                response["user"] = {
+                                    "id": str(user.id),
+                                    "full_name": user.full_name,
+                                    "email": user.email,
+                                    "stag": user.stag
+                                }
+                                response["timestamp"] = datetime.now(timezone.utc).isoformat()
+                                
+                                await manager.broadcast_with_lock_held(response, group_id)
                         
                     elif action == "withdraw":
-                        transaction_in = GroupWithdrawRequest(**data.get("data", {}))
-                        
-                        response = await service.remove_contribution(redis, group_id, transaction_in, user, background_tasks)
-                        response["type"] = "withdrawal"
+                        # Acquire lock to ensure atomic processing and broadcasting order
+                        group_lock = await manager.get_group_lock(group_id)
+                        async with group_lock:
+                            transaction_in = GroupWithdrawRequest(**data.get("data", {}))
+                            
+                            response = await service.remove_contribution(redis, group_id, transaction_in, user, background_tasks)
+                            response["type"] = "withdrawal"
+                            
+                            if response:
+                                response["user"] = {
+                                    "id": str(user.id),
+                                    "full_name": user.full_name,
+                                    "email": user.email,
+                                    "stag": user.stag
+                                }
+                                response["timestamp"] = datetime.now(timezone.utc).isoformat()
+                                await manager.broadcast_with_lock_held(response, group_id)
                     
                     if response:
                         # Add user info to response for chat display

@@ -21,6 +21,13 @@ class ConnectionManager:
                 self.group_locks[group_id] = asyncio.Lock()
             self.active_connections[group_id].append(websocket)
 
+    async def get_group_lock(self, group_id: uuid.UUID) -> asyncio.Lock:
+        """Get or create a lock for a specific group."""
+        async with self.lock:
+            if group_id not in self.group_locks:
+                self.group_locks[group_id] = asyncio.Lock()
+            return self.group_locks[group_id]
+
     def disconnect(self, websocket: WebSocket, group_id: uuid.UUID):
         """Remove a WebSocket connection from a group."""
         if group_id in self.active_connections:
@@ -45,6 +52,21 @@ class ConnectionManager:
         async with group_lock:
             tasks = [self._send_message(connection, message, group_id) for connection in connections]
             await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def broadcast_with_lock_held(self, message: dict, group_id: uuid.UUID):
+        """
+        Broadcast a message assuming the caller already holds the group lock.
+        WARNING: Caller MUST hold the group lock before calling this.
+        """
+        async with self.lock:
+            connections = list(self.active_connections.get(group_id, []))
+        
+        if not connections:
+            return
+
+        # We assume the lock is held by the caller, so we just send
+        tasks = [self._send_message(connection, message, group_id) for connection in connections]
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _send_message(self, connection: WebSocket, message: dict, group_id: uuid.UUID):
         try:

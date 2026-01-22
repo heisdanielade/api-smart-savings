@@ -36,9 +36,6 @@ async def test_broadcast_ordering():
     await asyncio.gather(t1, t2)
     
     # Check for interleaving
-    # If serialized, we should see START X, END X, START Y, END Y
-    # If concurrent, we might see START X, START Y, END X, END Y
-    
     is_interleaved = False
     for i in range(len(send_log) - 1):
         if send_log[i].startswith("START") and send_log[i+1].startswith("START"):
@@ -53,40 +50,58 @@ async def test_broadcast_ordering():
     assert "START 2" in send_log
 
 @pytest.mark.asyncio
-async def test_broadcast_concurrency_different_groups():
+async def test_race_condition_prevention():
     """
-    Verify that broadcasts for different groups can run concurrently.
+    Verify that holding the group lock prevents other broadcasts.
+    Simulates the route handler scenario:
+    1. Request A acquires lock
+    2. Request A does 'slow work' (DB + Email)
+    3. Request B tries to acquire lock
+    4. Request A finishes work and broadcasts
+    5. Request A releases lock
+    6. Request B acquires lock, does work, broadcasts
     """
     manager = ConnectionManager()
-    group1_id = uuid.uuid4()
-    group2_id = uuid.uuid4()
-    
+    group_id = uuid.uuid4()
     ws1 = AsyncMock()
-    ws2 = AsyncMock()
+    await manager.connect(ws1, group_id)
     
-    await manager.connect(ws1, group1_id)
-    await manager.connect(ws2, group2_id)
+    event_log = []
     
-    send_log = []
+    async def process_request(req_id, duration):
+        # Simulate route handler logic
+        lock = await manager.get_group_lock(group_id)
+        async with lock:
+            event_log.append(f"LOCK ACQUIRED {req_id}")
+            # Simulate slow service work
+            await asyncio.sleep(duration)
+            event_log.append(f"WORK DONE {req_id}")
+            # Simulate broadcast
+            await manager.broadcast_with_lock_held({"id": req_id}, group_id)
+            event_log.append(f"BROADCAST DONE {req_id}")
+            
+    # Start Request A (slow)
+    t1 = asyncio.create_task(process_request("A", 0.2))
     
-    async def slow_send(connection, message, group_id):
-        msg_id = message['id']
-        send_log.append(f"START {msg_id}")
-        await asyncio.sleep(0.05)
-        send_log.append(f"END {msg_id}")
-        
-    manager._send_message = slow_send
-    
-    # Fire broadcasts for different groups
-    t1 = asyncio.create_task(manager.broadcast({"id": "1"}, group1_id))
-    t2 = asyncio.create_task(manager.broadcast({"id": "2"}, group2_id))
+    # Start Request B (fast) shortly after
+    await asyncio.sleep(0.05)
+    t2 = asyncio.create_task(process_request("B", 0.01))
     
     await asyncio.gather(t1, t2)
     
-    # These SHOULD be interleaved (or at least could be) because they are different groups
-    # But strictly speaking, we just want to make sure they both finished.
-    # Proving concurrency is harder without precise timing, but we can verify they both ran.
+    # Expected order:
+    # LOCK ACQUIRED A
+    # (B tries to acquire but waits)
+    # WORK DONE A
+    # BROADCAST DONE A
+    # LOCK ACQUIRED B
+    # WORK DONE B
+    # BROADCAST DONE B
     
-    assert len(send_log) == 4
-    assert "START 1" in send_log
-    assert "START 2" in send_log
+    print(event_log)
+    
+    # Verify A finished before B started
+    a_end_idx = event_log.index("BROADCAST DONE A")
+    b_start_idx = event_log.index("LOCK ACQUIRED B")
+    
+    assert b_start_idx > a_end_idx, "Request B started before Request A finished! Lock failed."
