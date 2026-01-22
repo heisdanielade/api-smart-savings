@@ -290,7 +290,9 @@ async def test_confirm_transaction_once_executes_immediately(ims_service, mock_i
     # triggers app.core.setup.redis import which tries to connect to redis using settings.REDIS_URL
     # which might be invalid/missing in CI env if not mocked.
     
-    with patch("redis.asyncio.Redis.from_url") as mock_redis_conn, \
+    with patch("sqlalchemy.ext.asyncio.create_async_engine") as mock_engine, \
+         patch("app.infra.database.session.AsyncSessionLocal") as mock_session_local, \
+         patch("redis.asyncio.Redis.from_url") as mock_redis_conn, \
          patch("app.core.tasks.cron_jobs._process_single_transaction", new_callable=AsyncMock) as mock_process, \
          patch("app.modules.wallet.repository.WalletRepository") as mock_wallet_repo_cls, \
          patch("app.modules.user.repository.UserRepository") as mock_user_repo_cls, \
