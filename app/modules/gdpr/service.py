@@ -16,9 +16,10 @@ from app.core.utils.helpers import get_client_ip
 from app.modules.shared.helpers import generate_secure_code, transform_time
 from app.modules.auth.schemas import VerificationCodeOnlyRequest
 from app.modules.user.models import User
-from app.modules.shared.enums import NotificationType, GDPRRequestType, GDPRRequestStatus
-from app.modules.gdpr.models import GDPRRequest
+from app.modules.shared.enums import NotificationType, GDPRRequestType, GDPRRequestStatus, ConsentType, ConsentStatus
+from app.modules.gdpr.models import GDPRRequest, UserConsentAudit
 from app.modules.gdpr.helpers import create_gdpr_pdf
+from app.modules.gdpr.schemas import ConsentCreate
 
 
 class GDPRService:
@@ -317,4 +318,68 @@ class GDPRService:
             context=context,
             attachments=[pdf_file],
         )
+
+    async def add_consent(
+        self,
+        request: Request,
+        current_user: User,
+        consent_data: ConsentCreate
+    ) -> UserConsentAudit:
+        """
+        Add a new consent record for the user.
+        """
+        # Check if active consent already exists
+        active = await self.gdpr_repo.get_active_consent(current_user.id, consent_data.consent_type)
+        if active:
+            # If already granted and simpler version check logic could be here.
+            # For now, we allow re-granting which creates a new record or updates?
+            # Audit log typically implies new record.
+             pass
+
+        raw_ip = get_client_ip(request)
+        ip = hash_ip(raw_ip) # Anonymize IP
+        user_agent = request.headers.get("user-agent", "unknown")
+
+        consent = UserConsentAudit(
+            user_id=current_user.id,
+            consent_type=consent_data.consent_type,
+            consent_status=ConsentStatus.GRANTED,
+            version=consent_data.version,
+            source_ip=ip,
+            user_agent=user_agent
+        )
+        
+        return await self.gdpr_repo.create_consent(consent)
+
+    async def revoke_consent(
+        self,
+        current_user: User,
+        consent_id: UUID
+    ) -> UserConsentAudit:
+        """
+        Revoke an existing consent.
+        """
+        consent = await self.gdpr_repo.get_consent_by_id(consent_id)
+        if not consent:
+            raise CustomException.e404_not_found("Consent record not found.")
+            
+        if consent.user_id != current_user.id:
+             raise CustomException.e403_forbidden("You do not own this consent record.")
+             
+        if consent.consent_status == ConsentStatus.REVOKED:
+            raise CustomException.e400_bad_request("Consent already revoked.")
+            
+        consent.consent_status = ConsentStatus.REVOKED
+        consent.revoked_at = datetime.now(timezone.utc)
+        
+        return await self.gdpr_repo.update_consent(consent)
+
+    async def check_consent_active(self, user_id: UUID, consent_type: ConsentType) -> bool:
+        """
+        Check if user has active consent for a specific feature.
+        """
+        consent = await self.gdpr_repo.get_active_consent(user_id, consent_type)
+        if not consent:
+            return False
+        return consent.consent_status == ConsentStatus.GRANTED
 
