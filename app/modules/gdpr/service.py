@@ -23,12 +23,13 @@ from app.modules.gdpr.schemas import ConsentCreate
 
 
 class GDPRService:
-    def __init__(self, user_repo, wallet_repo, gdpr_repo, transaction_repo, notification_manager):
+    def __init__(self, user_repo, wallet_repo, gdpr_repo, transaction_repo, notification_manager, ims_repo):
         self.user_repo = user_repo
         self.wallet_repo = wallet_repo
         self.gdpr_repo = gdpr_repo
         self.transaction_repo = transaction_repo
         self.notification_manager = notification_manager
+        self.ims_repo = ims_repo
 
     async def request_delete_account(
         self,
@@ -232,6 +233,9 @@ class GDPRService:
         # Get GDPR requests history
         gdpr_requests = await self.gdpr_repo.get_user_gdpr_requests(user.id)
 
+        # Get IMS actions
+        ims_actions = await self.ims_repo.get_actions_by_user(user.id)
+
         # Structure the data
         data_summary = {
             "user_profile": {
@@ -280,6 +284,15 @@ class GDPRService:
                     "refusal_reason": req.refusal_reason or "N/A",
                 }
                 for req in gdpr_requests
+            ],
+            "ims_actions": [
+                {
+                    "action_id": str(action.id),
+                    "user_prompt": action.user_prompt,
+                    "intent": action.intent,
+                    "created_at": action.created_at.strftime("%Y-%m-%d %H:%M:%S UTC") if action.created_at else "N/A",
+                }
+                for action in ims_actions
             ],
             "export_metadata": {
                 "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")

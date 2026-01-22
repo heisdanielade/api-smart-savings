@@ -241,6 +241,40 @@ async def create_gdpr_pdf(data: Dict, password: str) -> bytes:
         else:
             elements.append(Paragraph("No GDPR requests found.", styles['Normal']))
 
+        elements.append(Spacer(1, 0.3 * inch))
+
+        # IMS Actions Section
+        elements.append(Paragraph("SaveBuddy AI Interactions", heading_style))
+        if data.get("ims_actions"):
+            ims_data = [[
+                Paragraph("<b>Date</b>", cell_header_style),
+                Paragraph("<b>Prompt</b>", cell_header_style),
+                Paragraph("<b>Intent</b>", cell_header_style)
+            ]]
+            for action in data["ims_actions"]:
+                ims_data.append([
+                    Paragraph(action["created_at"], cell_style),
+                    Paragraph(action["user_prompt"], cell_style),
+                    Paragraph(action["intent"], cell_style)
+                ])
+            
+            # Adjust column widths: Date (1.5), Prompt (3.0), Intent (1.5)
+            ims_table = Table(ims_data, colWidths=[1.5 * inch, 3.0 * inch, 1.5 * inch])
+            ims_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('FONTSIZE', (0, 0), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('GRID', (0, 0), (-1, -1), 1, colors.grey),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey]),
+            ]))
+            elements.append(ims_table)
+        else:
+            elements.append(Paragraph("No SaveBuddy AI interactions found.", styles['Normal']))
+
         # Footer note
         elements.append(Spacer(1, 0.5 * inch))
         elements.append(Paragraph(
