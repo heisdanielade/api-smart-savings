@@ -325,6 +325,9 @@ class GroupService:
         
         # Orchestrate atomic operations with transaction handling
         try:
+            # Determine transaction type based on group type
+            tx_type = TransactionType.INDIVIDUAL_SAVINGS_DEPOSIT if group.is_solo else TransactionType.GROUP_SAVINGS_DEPOSIT
+
             # 1. Lock funds in wallet
             await self.wallet_repo.update_locked_amount(wallet.id, amount_to_contribute)
             
@@ -334,8 +337,8 @@ class GroupService:
                 wallet_id=wallet.id,
                 owner_id=current_user.id,
                 amount=-float(amount_to_contribute),
-                type=TransactionType.GROUP_SAVINGS_DEPOSIT,
-                description=f"Contribution to group: {group_id}",
+                type=tx_type,
+                description=f"Contribution to {'goal' if group.is_solo else 'group'}: {group.name}", # Improved description
                 status=TransactionStatus.COMPLETED,
             )
             self.wallet_repo.db.add(wallet_transaction)
@@ -351,7 +354,7 @@ class GroupService:
                 group_id, 
                 current_user.id, 
                 amount_to_contribute, 
-                TransactionType.GROUP_SAVINGS_DEPOSIT
+                tx_type
             )
             
             # Commit all operations
@@ -520,6 +523,9 @@ class GroupService:
 
         # Orchestrate atomic operations with transaction handling
         try:
+            # Determine transaction type based on group type
+            tx_type = TransactionType.INDIVIDUAL_SAVINGS_WITHDRAWAL if group.is_solo else TransactionType.GROUP_SAVINGS_WITHDRAWAL
+
             # 1. Unlock funds in wallet
             await self.wallet_repo.update_locked_amount(wallet.id, -amount_to_withdraw)
             
@@ -529,8 +535,8 @@ class GroupService:
                 wallet_id=wallet.id,
                 owner_id=current_user.id,
                 amount=float(amount_to_withdraw),
-                type=TransactionType.GROUP_SAVINGS_WITHDRAWAL,
-                description=f"Withdrawal from group: {group_id}",
+                type=tx_type,
+                description=f"Withdrawal from {'goal' if group.is_solo else 'group'}: {group.name}", # Improved description
                 status=TransactionStatus.COMPLETED,
             )
             self.wallet_repo.db.add(wallet_transaction)
@@ -546,7 +552,7 @@ class GroupService:
                 group_id, 
                 current_user.id, 
                 amount_to_withdraw, 
-                TransactionType.GROUP_SAVINGS_WITHDRAWAL
+                tx_type
             )
             
             # Commit all operations
