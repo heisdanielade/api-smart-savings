@@ -101,7 +101,9 @@ def gdpr_service():
     transaction_repo = AsyncMock()
     notification_manager = AsyncMock()
 
-    return GDPRService(user_repo, wallet_repo, gdpr_repo, transaction_repo, notification_manager)
+    ims_repo = AsyncMock()
+    
+    return GDPRService(user_repo, wallet_repo, gdpr_repo, transaction_repo, notification_manager, ims_repo)
 
 class TestGenerateGDPRSummary:
     """Tests for generate_gdpr_summary method."""
@@ -115,6 +117,7 @@ class TestGenerateGDPRSummary:
         gdpr_service.wallet_repo.get_wallet_by_user_id.return_value = mock_wallet
         gdpr_service.transaction_repo.get_user_transactions.return_value = [mock_transaction]
         gdpr_service.gdpr_repo.get_user_gdpr_requests.return_value = [mock_gdpr_request]
+        gdpr_service.ims_repo.get_actions_by_user.return_value = []
 
         # Execute - now passing User object instead of user_id
         result = await gdpr_service.generate_gdpr_summary(mock_user)
@@ -152,6 +155,7 @@ class TestGenerateGDPRSummary:
         gdpr_service.wallet_repo.get_wallet_by_user_id.return_value = None
         gdpr_service.gdpr_repo.get_user_transactions.return_value = []
         gdpr_service.gdpr_repo.get_user_gdpr_requests.return_value = []
+        gdpr_service.ims_repo.get_actions_by_user.return_value = []
 
         # Execute - now passing User object instead of user_id
         result = await gdpr_service.generate_gdpr_summary(mock_user)
@@ -401,6 +405,7 @@ class TestProcessAndSendGDPRExport:
         gdpr_service.gdpr_repo.get_user_transactions.return_value = []
         gdpr_service.gdpr_repo.get_user_gdpr_requests.return_value = []
         gdpr_service.gdpr_repo.get_by_id.return_value = mock_gdpr_request
+        gdpr_service.ims_repo.get_actions_by_user.return_value = []
 
         # Execute - method name changed from _process_and_send_gdpr_export to process_and_send_gdpr_export
         await gdpr_service.process_and_send_gdpr_export(

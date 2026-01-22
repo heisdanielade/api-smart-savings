@@ -167,3 +167,14 @@ class ConsentType(str, Enum):
     def sa_enum(cls):
         from sqlalchemy import Enum as SAEnum
         return SAEnum(cls, name="consent_type_enum")
+
+
+class ConsentStatus(str, Enum):
+    """Enumeration of consent statuses."""
+    GRANTED = "GRANTED"
+    REVOKED = "REVOKED"
+
+    @classmethod
+    def sa_enum(cls):
+        from sqlalchemy import Enum as SAEnum
+        return SAEnum(cls, name="consent_status_enum")

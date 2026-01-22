@@ -9,7 +9,7 @@ from sqlalchemy import Column, DateTime, ForeignKey
 from sqlmodel import Field, SQLModel, Relationship
 from pydantic import ConfigDict
 
-from app.modules.shared.enums import GDPRRequestStatus, GDPRRequestType, ConsentType
+from app.modules.shared.enums import GDPRRequestStatus, GDPRRequestType, ConsentType, ConsentStatus
 
 class GDPRRequest(SQLModel, table=True):
     """
@@ -77,6 +77,9 @@ class UserConsentAudit(SQLModel, table=True):
     
     consent_type: ConsentType = Field(
         sa_column=Column(ConsentType.sa_enum(), nullable=False)
+    )
+    consent_status: ConsentStatus = Field(
+        sa_column=Column(ConsentStatus.sa_enum(), nullable=False, server_default=ConsentStatus.GRANTED.value)
     )
     version: str = Field(nullable=False)
     source_ip: str = Field(nullable=False)

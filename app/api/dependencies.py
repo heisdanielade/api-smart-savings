@@ -22,7 +22,7 @@ from app.core.utils.exceptions import CustomException
 from app.modules.user.service import UserService
 from app.modules.wallet.repository import WalletRepository, TransactionRepository
 from app.modules.wallet.service import WalletService
-from app.modules.shared.enums import Role
+from app.modules.shared.enums import Role, ConsentType
 from app.modules.rbac.repository import RBACRepository
 from app.modules.rbac.service import RBACService
 from app.modules.group.service import GroupService
@@ -206,7 +206,11 @@ async def get_gdpr_service(db: AsyncSession = Depends(get_session)):
     gdpr_repo = GDPRRepository(db)
     transaction_repo = TransactionRepository(db)
     notification_manager = EmailNotificationService()
-    return GDPRService(user_repo, wallet_repo, gdpr_repo, transaction_repo, notification_manager)
+    
+    from app.modules.ims.repository import IMSRepository
+    ims_repo = IMSRepository(db)
+    
+    return GDPRService(user_repo, wallet_repo, gdpr_repo, transaction_repo, notification_manager, ims_repo)
 
 async def get_wallet_service(db: AsyncSession = Depends(get_session)):
     """Dependency factory for wallet service."""
@@ -264,3 +268,17 @@ async def get_ims_service(db: AsyncSession = Depends(get_session)):
     ims_repo = IMSRepository(db)
     group_repo = GroupRepository(db)
     return IMSService(ims_repo, group_repo)
+
+
+async def require_savebuddy_consent(
+    current_user: User = Depends(get_current_user),
+    gdpr_service: GDPRService = Depends(get_gdpr_service),
+) -> bool:
+    """
+    Dependency to ensure user has granted consent for SaveBuddy AI.
+    If consent is revoked or missing, raises 403 Forbidden.
+    """
+    is_active = await gdpr_service.check_consent_active(current_user.id, ConsentType.SAVEBUDDY_AI)
+    if not is_active:
+        CustomException.e403_forbidden("SaveBuddy AI consent is revoked or not granted. Please grant consent to use this feature.")
+    return True

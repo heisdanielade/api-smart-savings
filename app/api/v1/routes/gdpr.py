@@ -11,6 +11,7 @@ from app.core.utils.exceptions import CustomException
 from app.core.utils.response import standard_response
 from app.modules.auth.schemas import VerificationCodeOnlyRequest
 from app.modules.gdpr.service import GDPRService
+from app.modules.gdpr.schemas import ConsentCreate, ConsentResponse
 from app.modules.user.models import User
 from app.modules.user.repository import UserRepository
 
@@ -97,4 +98,50 @@ async def request_data_export(request: Request, background_tasks: BackgroundTask
     return standard_response(
         status="success",
         message="Your data request according to GDPR has been received and is now being processed. You’ll receive your it via email within 24 hours."
+    )
+
+
+@router.post("/consent", status_code=status.HTTP_201_CREATED, response_model=ConsentResponse)
+@limiter.limit("5/minute")
+async def grant_consent(
+    request: Request,
+    consent_data: ConsentCreate,
+    current_user: User = Depends(get_current_user),
+    gdpr_service: GDPRService = Depends(get_gdpr_service)
+) -> dict[str, Any]:
+    """
+    Grant consent to a specific feature (e.g., SaveBuddy AI).
+    """
+    consent = await gdpr_service.add_consent(request, current_user, consent_data)
+    
+    return standard_response(
+        status="success",
+        message="Consent granted successfully.",
+        data=consent.model_dump(mode="json")
+    )
+
+
+@router.post("/consent/{consent_id}/revoke", status_code=status.HTTP_200_OK, response_model=ConsentResponse)
+@limiter.limit("5/minute")
+async def revoke_consent(
+    request: Request,
+    consent_id: str,
+    current_user: User = Depends(get_current_user),
+    gdpr_service: GDPRService = Depends(get_gdpr_service)
+) -> dict[str, Any]:
+    """
+    Revoke a previously granted consent.
+    """
+    try:
+        from uuid import UUID
+        consent_uuid = UUID(consent_id)
+    except ValueError:
+        raise CustomException.e400_bad_request("Invalid consent ID format.")
+
+    consent = await gdpr_service.revoke_consent(current_user, consent_uuid)
+    
+    return standard_response(
+        status="success",
+        message="Consent revoked successfully.",
+        data=consent.model_dump(mode="json")
     )

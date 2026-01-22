@@ -312,7 +312,7 @@ class GroupRepository:
         result = await self.session.execute(
             select(Group)
             .join(GroupMember, Group.id == GroupMember.group_id)
-            .where(GroupMember.user_id == user_id and not Group.is_solo)
+            .where(GroupMember.user_id == user_id and Group.is_solo == False)
             
         )
         return result.scalars().all()
@@ -330,7 +330,7 @@ class GroupRepository:
         result = await self.session.execute(
             select(Group)
             .join(GroupMember, Group.id == GroupMember.group_id)
-            .where(GroupMember.user_id == user_id and Group.is_solo)
+            .where(GroupMember.user_id == user_id and Group.is_solo == True)
         )
         return result.scalars().all()
 

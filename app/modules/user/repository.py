@@ -202,10 +202,10 @@ class UserRepository:
         Returns:
             float: Total amount contributed across all groups.
         """
-        from app.modules.group.models import GroupMember
+        from app.modules.group.models import GroupMember, Group
         
-        stmt = select(func.coalesce(func.sum(GroupMember.contributed_amount), 0)).where(
-            GroupMember.user_id == user_id
+        stmt = select(func.coalesce(func.sum(GroupMember.contributed_amount), 0)).join(Group, GroupMember.group_id == Group.id).where(
+            GroupMember.user_id == user_id and Group.is_solo == False
         )
         result = await self.db.execute(stmt)
         return float(result.scalar() or 0)
@@ -227,7 +227,7 @@ class UserRepository:
         stmt = (
             select(Group.name, GroupMember.contributed_amount)
             .join(Group, GroupMember.group_id == Group.id)
-            .where(GroupMember.user_id == user_id)
+            .where(GroupMember.user_id == user_id and Group.is_solo == False)
         )
         result = await self.db.execute(stmt)
         rows = result.all()
@@ -244,8 +244,8 @@ class UserRepository:
         Returns:
             int: Number of active group memberships.
         """
-        from app.modules.group.models import GroupMember
+        from app.modules.group.models import GroupMember, Group
         
-        stmt = select(func.count(GroupMember.id)).where(GroupMember.user_id == user_id)
+        stmt = select(func.count(GroupMember.id)).join(Group, GroupMember.group_id == Group.id).where(GroupMember.user_id == user_id and Group.is_solo == False)
         result = await self.db.execute(stmt)
         return int(result.scalar() or 0)

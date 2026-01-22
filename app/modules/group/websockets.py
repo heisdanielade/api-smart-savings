@@ -60,7 +60,7 @@ class ConnectionManager:
         """
         async with self.lock:
             connections = list(self.active_connections.get(group_id, []))
-        
+
         if not connections:
             return
 

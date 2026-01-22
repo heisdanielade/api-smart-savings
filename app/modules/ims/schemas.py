@@ -65,12 +65,15 @@ class DraftTransaction(BaseModel):
     group_name: Optional[str] = None
     
     # Schedule
-    day_of_week: Optional[str] = None # Return "Monday" etc
+    day_of_week: Optional[str] = None
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
     
     # Projection (calculated by backend)
-    projected_dates: List[ProjectionScheduleItem] = Field(default_factory=list)
+    projected_dates: List[ProjectionScheduleItem] = Field(
+        default_factory=list,
+        description="List of projected execution dates and amounts. Note: This list is limited to a maximum of 24 future occurrences."
+    )
     first_run_date: Optional[datetime] = None
     
     # Validation status
@@ -87,7 +90,7 @@ class ConfirmTransactionRequest(BaseModel):
     destination_type: DestinationType
     goal_name: Optional[str] = None
     group_name: Optional[str] = None
-    day_of_week: Optional[str] = None # Receive "Monday" etc
+    day_of_week: Optional[str] = None
     start_date: datetime
     end_date: Optional[datetime] = None
 
