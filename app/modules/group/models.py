@@ -5,7 +5,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import List, TYPE_CHECKING
 from sqlmodel import Field, Relationship, SQLModel, Column, DateTime, Numeric
-from pydantic import ConfigDict, root_validator
+from pydantic import ConfigDict, model_validator
 from app.modules.shared.enums import GroupRole, TransactionType, Currency
 
 if TYPE_CHECKING:
@@ -22,19 +22,16 @@ class GroupBase(SQLModel):
     )
     is_solo: bool = Field(default=False)
 
-    @root_validator(skip_on_failure=True)
-    def enforce_solo_group_rules(cls, values):
+    @model_validator(mode='after')
+    def enforce_solo_group_rules(self):
         """
         Enforce solo group constraints:
         - Solo groups must always have require_admin_approval_for_funds_removal = False
         """
-        is_solo = values.get('is_solo')
-        require_admin = values.get('require_admin_approval_for_funds_removal')
-        
-        if is_solo and require_admin:
-            values['require_admin_approval_for_funds_removal'] = False
+        if self.is_solo and self.require_admin_approval_for_funds_removal:
+            self.require_admin_approval_for_funds_removal = False
             
-        return values
+        return self
 
 
 class Group(GroupBase, table=True):

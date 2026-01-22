@@ -20,6 +20,7 @@ from app.modules.ims.schemas import (
     ConfirmResponse,
     ScheduledListResponse,
     CancelResponse,
+    ChatHistoryResponse,
 )
 from app.modules.shared.enums import TransactionStatus
 
@@ -180,6 +181,28 @@ async def get_scheduled_transactions(
             }
             for tx in transactions
         ],
+    )
+
+
+@router.get("/history", status_code=status.HTTP_200_OK, response_model=ChatHistoryResponse)
+@limiter.limit("10/minute")
+async def get_chat_history(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    ims_service: IMSService = Depends(get_ims_service),
+) -> dict[str, Any]:
+    """
+    Get chat history (prompts and transactions) in chronological order.
+    
+    Returns:
+        Historical list of user prompts and confirmed transactions
+    """
+    history = await ims_service.get_chat_history(current_user)
+    
+    return standard_response(
+        status="success",
+        message="Chat history retrieved successfully.",
+        data=[h.model_dump(mode="json") for h in history],
     )
 
 

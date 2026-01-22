@@ -24,8 +24,9 @@ from app.modules.ims.schemas import (
     DraftTransaction,
     ProjectionScheduleItem,
     ConfirmTransactionRequest,
+    ChatHistoryItem,
 )
-from app.modules.ims.models import ScheduledTransaction
+from app.modules.ims.models import ScheduledTransaction, IMSAction
 from app.modules.ims.repository import IMSRepository
 from app.modules.group.repository import GroupRepository
 from app.modules.user.models import User
@@ -190,7 +191,6 @@ class ProjectionService:
             draft.missing_fields = missing_fields
             draft.validation_messages = validation_messages
         
-        # Generate projection if we have enough data
         if draft.amount and draft.start_date:
             dates = cls.get_projection_schedule(
                 start_date=draft.start_date,
@@ -203,6 +203,8 @@ class ProjectionService:
             ]
             if dates:
                 draft.first_run_date = dates[0]
+                if draft.end_date is None:
+                    draft.end_date = dates[-1]
         
         return draft
     
@@ -304,6 +306,14 @@ class IMSService:
         # Call external NLP service
         
         interpretation = await self._call_nlp_service(context)
+        
+        # Save prompt action
+        await self.ims_repo.create_action(IMSAction(
+            user_id=current_user.id,
+            user_prompt=prompt,
+            intent=interpretation.intent.value if hasattr(interpretation.intent, 'value') else str(interpretation.intent),
+            data=interpretation.model_dump(mode="json")
+        ))
         
         # Create draft with projection
         draft = ProjectionService.create_draft(
@@ -542,3 +552,40 @@ class IMSService:
             raise ValueError("You do not own this scheduled transaction")
         
         return await self.ims_repo.cancel_scheduled_transaction(tx_id)
+    
+    async def get_chat_history(self, current_user: User) -> List[ChatHistoryItem]:
+        """
+        Get chat history merging prompts and transactions.
+        """
+        actions = await self.ims_repo.get_actions_by_user(current_user.id)
+        transactions = await self.ims_repo.get_scheduled_transactions_by_user(current_user.id)
+        
+        history = []
+        
+        for action in actions:
+            history.append(ChatHistoryItem(
+                type="prompt",
+                id=str(action.id),
+                timestamp=action.created_at,
+                content={"text": action.user_prompt, "intent": action.intent}
+            ))
+            
+        for tx in transactions:
+            history.append(ChatHistoryItem(
+                type="transaction",
+                id=str(tx.id),
+                timestamp=tx.created_at,
+                content={
+                    "amount": float(tx.amount),
+                    "currency": tx.currency.value,
+                    "frequency": tx.frequency.value,
+                    "destination_type": tx.destination_type.value,
+                    "status": tx.status.value,
+                    "next_run_at": tx.next_run_at.isoformat() if tx.next_run_at else None,
+                }
+            ))
+            
+        # Sort by timestamp ascending (chronological)
+        history.sort(key=lambda x: x.timestamp)
+        
+        return history

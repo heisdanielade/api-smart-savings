@@ -6,7 +6,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 from calendar import day_name
-from pydantic import BaseModel, Field, field_validator, validator
+from pydantic import BaseModel, Field, field_validator
 
 from app.modules.shared.enums import (
     TransactionFrequency,
@@ -104,7 +104,8 @@ class ScheduledTransactionResponse(BaseModel):
     created_at: datetime
     day_of_week: Optional[str] = None
 
-    @validator("day_of_week", pre=True, check_fields=False)
+    @field_validator("day_of_week", mode="before")
+    @classmethod
     def convert_int_to_day_name(cls, v):
         if isinstance(v, int) and 0 <= v <= 6:
             return day_name[v]
@@ -142,3 +143,15 @@ class ScheduledListResponse(BaseResponse):
 
 class CancelResponse(BaseResponse):
     data: Optional[Any] = None
+
+
+class ChatHistoryItem(BaseModel):
+    """Represents an item in the chat history (either a user prompt or a transaction result)."""
+    type: str = Field(..., description="Type of item: 'prompt' or 'transaction'")
+    id: str
+    timestamp: datetime
+    content: Dict[str, Any]
+
+
+class ChatHistoryResponse(BaseResponse):
+    data: List[ChatHistoryItem]
