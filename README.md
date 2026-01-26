@@ -14,7 +14,7 @@
 ## Overview
 
 **SmartSave** is a GDPR-compliant smart savings application designed for users in the EU, focusing on transparency, collaboration, and security.  
-It combines traditional savings with AI-powered financial insights via the **SaveBuddy AI assistant**, allowing users to manage personal and group savings easily, while keeping their data private and secure.  
+It combines traditional savings with NLP-powered automated savings via the **SaveBuddy AI assistant**, allowing users to manage personal and group savings easily, while keeping their data private and secure.  
 
 ## Contributors
 
