@@ -3,66 +3,90 @@
 ### Requirements
 
 - **Python 3.9+**
-- **Docker** (installed & running)
-- **PostgreSQL** (client, CLI, pgAdmin recommended)
-- **Make** (for running Makefile commands)
+- **Docker** (installed and running)
+- **PostgreSQL** (running instance)
+- **Make** (installed to execute Makefile commands)
 
 ---
 
 ### Setup Steps
 
-1. **Clone the Repository**
+#### 1. Clone the Repositories
+You will need both the API and the NLP services locally:
 
 ```bash
-   git clone https://github.com/heisdanielade/api-smart-savings.git
-   cd api-smart-savings
+# Clone API repository
+git clone https://github.com/heisdanielade/api-smart-savings.git
+
+# Clone NLP repository
+git clone https://github.com/ArtemRuzhevych/nlp-savebuddy.git
 ```
 
-1. **Install Dependencies**
+Install dependencies in both directories:
 
+**In the API directory:**
 ```bash
+cd api-smart-savings
 pip install -r requirements.txt
 ```
 
-1. **Configure Environment Variables**
+**In the NLP directory:**
+```bash
+cd ../nlp-savebuddy
+pip install -r requirements.txt
+```
 
-- Copy `.env.example` → `.env` (created by you)
-- Create a PostgreSQL database (e.g., `smartsave`)
-- Update `.env` with your **database credentials**
-- Set one or more test emails under:
+#### 2. Configure Environment Variables
+Environment variables must be configured in both directories before building.
+
+1. Navigate to each directory (`api-smart-savings/` and `nlp-savebuddy/`).
+
+2. Copy `.env.example` to `.env`.
+
+3. In the API repo, update your database credentials and test emails:
 
 ```bash
 TEST_EMAIL_ACCOUNTS=email1@example.com,email2@example.com
 ```
+These accounts are used by a **startup script** that seeds test data (e.g., test user accounts). Update other values as provided privately by the project manager: ([@heisdanielade](https://github.com/heisdanielade))
 
-- These accounts are used by a **startup script** that seeds test data (e.g., test user accounts).
-- Update other values as provided privately by the project manager: ([@heisdanielade](https://github.com/heisdanielade))
+4. Ensure the NLP URL is set to http://localhost:8000.
 
-1. **Run App Commands**
+#### 3. Create Docker Network
 
-A docker network is required for the app (Core backend + IMS service) to run. Create it with:
+The application requires a shared Docker network for the core backend and NLP service which must be initialised from the **API Repository** directory:
 
 ```bash
+cd api-smart-savings
 docker network create smartsave-net
 ```
 
-Start the app using Docker:
-
+#### 4. Run the application (Using Makefile shortcut commands)
+**In the API directory:**
 ```bash
+cd api-smart-savings
 make build
 ```
 
-Stop the app using Docker:
-
+**In the NLP directory:**
 ```bash
-docker network create smartsave-net # Create docker network
-make build      # Start app using Docker
-make down       # Stop app
-make tests      # Run tests
+cd ../nlp-savebuddy
+make build
 ```
 
-More helpful commands are provided in `Makefile` in the project's root directory.
+Common commands:
 
-1. **Verification**
-   Once the app starts, verify it’s running by visiting:
-   **_<http://localhost:3195>_**
+```bash
+make down       # Stop app
+make tests      # Run tests
+make logs      # View logs (Only in NLP repo)
+```
+
+Additional commands are available in `Makefile` at the project's root directory.
+
+#### 5. Verify the setup
+Once all containers are healthy, access the services at:
+
+**API Endpoint:** http://localhost:3195
+
+**NLP Service:** http://localhost:8000
