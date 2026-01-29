@@ -98,6 +98,10 @@ Each module contains:
   Middleware → Router → Service → Repository → Database
 ```
 
+### Database Schema
+
+![Database Schema](docs/DB_Schema.png)
+
 ---
 
 ## Authentication
